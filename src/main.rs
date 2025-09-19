@@ -52,7 +52,7 @@ fn handle_subcommand(command: &args::Commands) {
     }
 }
 
-/// Execute main sequence processing workflow
+/// Execute main sequence processing workflow - memory optimized
 fn execute_main_processing(args: &args::Args) {
     let start_time = std::time::Instant::now();
     

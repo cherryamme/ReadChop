@@ -12,8 +12,8 @@ use std::{
 use std::time::Instant;
 use std::collections::HashSet;
 
-/// Buffer size constant for I/O performance optimization
-const BUFFER_SIZE: usize = 10 * 1024 * 1024;
+/// Buffer size constant for I/O performance optimization - memory optimized
+const BUFFER_SIZE: usize = 2 * 1024 * 1024; // Reduced from 10MB to 2MB
 
 /// Check if file is gzip compressed format
 fn is_gzip_file(path: &PathBuf) -> bool {
@@ -89,11 +89,15 @@ fn create_decoder<R: Read + 'static>(
     }
 }
 
-/// Sequence information structure
-#[derive(Debug, Clone)]
+/// Sequence information structure - optimized for memory efficiency
+#[derive(Debug)]
 pub struct ReadInfo {
-    /// Original FASTQ record
-    pub record: Record,
+    /// Original FASTQ record ID (only store ID, not full record)
+    pub record_id: String,
+    /// Sequence data (only store when needed)
+    pub sequence: Option<Vec<u8>>,
+    /// Quality data (only store when needed)
+    pub quality: Option<Vec<u8>>,
     /// Split type vector
     pub split_types: Vec<SplitType>,
     /// Output filename
@@ -106,39 +110,38 @@ pub struct ReadInfo {
     pub match_types: Vec<String>,
     /// Match name list
     pub match_names: Vec<String>,
-    /// Record ID
-    pub record_id: String,
     /// Whether to write FASTQ file
     pub should_write_to_fastq: bool,
-    /// Output record
-    pub output_record: Record,
     /// Sequence length
     pub sequence_length: usize,
     /// Sequence window position
     pub sequence_window: (usize, usize),
+    /// Trim positions for output
+    pub trim_positions: (usize, usize),
 }
 
 impl ReadInfo {
-    /// Create new sequence information
+    /// Create new sequence information - memory optimized
     pub fn new(record: Record) -> Self {
         let sequence_length = record.seq().len();
         Self {
-            record: record.clone(),
+            record_id: record.id().to_string(),
+            sequence: Some(record.seq().to_vec()),
+            quality: Some(record.qual().to_vec()),
             split_types: Vec::new(),
             output_filename: String::new(),
             strand_orientation: String::from("unknown"),
             sequence_type: String::from("valid"),
             match_types: Vec::new(),
             match_names: Vec::new(),
-            record_id: String::new(),
             should_write_to_fastq: false,
-            output_record: Record::new(),
             sequence_length,
             sequence_window: (0, sequence_length),
+            trim_positions: (0, sequence_length),
         }
     }
     
-    /// Update sequence information
+    /// Update sequence information - memory optimized
     pub fn update(
         &mut self, 
         pattern_match_types: &[String], 
@@ -152,6 +155,12 @@ impl ReadInfo {
         self.update_sequence_type(min_length, trim_mode);
         self.update_sequence_window();
         self.update_write_decision(trim_mode, id_separator);
+        
+        // Clear sequence and quality data if not needed for output
+        if !self.should_write_to_fastq {
+            self.sequence = None;
+            self.quality = None;
+        }
     }
     
     /// Update match names
@@ -248,25 +257,43 @@ impl ReadInfo {
         }
     }
     
-    /// Update write decision
+    /// Update write decision - memory optimized
     fn update_write_decision(&mut self, trim_mode: usize, id_separator: &str) {
         if self.sequence_type == "valid" {
             self.should_write_to_fastq = true;
             let (cut_left, cut_right) = self.calculate_trim_positions(trim_mode);
             let final_cut_right = if cut_right == 0 { self.sequence_length } else { cut_right };
             
-            self.output_record = Record::with_attrs(
-                &format!("{}{}{}{}{}", 
-                    self.record.id(), 
-                    id_separator, 
-                    self.strand_orientation, 
-                    id_separator, 
-                    self.record_id
-                ),
-                None,
-                &self.record.seq()[cut_left..final_cut_right],
-                &self.record.qual()[cut_left..final_cut_right],
+            // Store trim positions instead of creating full record
+            self.trim_positions = (cut_left, final_cut_right);
+            self.record_id = format!("{}{}{}{}{}", 
+                self.record_id, 
+                id_separator, 
+                self.strand_orientation, 
+                id_separator, 
+                self.record_id
             );
+        }
+    }
+    
+    /// Get output record - only create when needed
+    pub fn get_output_record(&self) -> Option<Record> {
+        if !self.should_write_to_fastq {
+            return None;
+        }
+        
+        if let (Some(seq), Some(qual)) = (&self.sequence, &self.quality) {
+            let (cut_left, cut_right) = self.trim_positions;
+            let final_cut_right = if cut_right == 0 { self.sequence_length } else { cut_right };
+            
+            Some(Record::with_attrs(
+                &self.record_id,
+                None,
+                &seq[cut_left..final_cut_right],
+                &qual[cut_left..final_cut_right],
+            ))
+        } else {
+            None
         }
     }
     
@@ -274,7 +301,7 @@ impl ReadInfo {
     pub fn to_tsv(&self) -> String {
         let mut tsv_line = format!(
             "{}\t{}\t{}", 
-            self.record.id(), 
+            self.record_id, 
             self.sequence_length, 
             self.sequence_type
         );

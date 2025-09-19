@@ -107,7 +107,7 @@ impl FileWriterManager {
             .expect("Failed to create output file");
         
         let encoder = GzEncoder::new(file, Compression::default());
-        let writer = BufWriter::with_capacity(1_000_000, encoder);
+        let writer = BufWriter::with_capacity(512_000, encoder); // Reduced from 1MB to 512KB
         
         self.start_writing_thread(writer, receiver);
         self.writers.insert(output_filename.to_string(), sender);
@@ -133,43 +133,47 @@ impl FileWriterManager {
             .expect("Failed to create output file");
         
         let encoder = GzEncoder::new(file, Compression::default());
-        let writer = BufWriter::with_capacity(1_000_000, encoder);
+        let writer = BufWriter::with_capacity(512_000, encoder); // Reduced from 1MB to 512KB
         
         self.start_writing_thread_controlled(writer, receiver, thread_pool);
         self.writers.insert(output_filename.to_string(), sender);
     }
 
-    /// Start write thread
+    /// Start write thread - memory optimized
     fn start_writing_thread(&mut self, mut writer: BufWriter<GzEncoder<File>>, receiver: Receiver<ReadInfo>) {
         let handle = thread::spawn(move || {
             for read_info in receiver.iter() {
-                let record_id = read_info.output_record.id();
-                let sequence = std::str::from_utf8(read_info.output_record.seq())
-                    .expect("Sequence is not valid UTF-8");
-                let quality = std::str::from_utf8(read_info.output_record.qual())
-                    .expect("Quality scores are not valid UTF-8");
-                
-                let record_string = format!("@{}\n{}\n+\n{}\n", record_id, sequence, quality);
-                write!(writer, "{}", record_string)
-                    .expect("Failed to write sequence record");
+                if let Some(output_record) = read_info.get_output_record() {
+                    let record_id = output_record.id();
+                    let sequence = std::str::from_utf8(output_record.seq())
+                        .expect("Sequence is not valid UTF-8");
+                    let quality = std::str::from_utf8(output_record.qual())
+                        .expect("Quality scores are not valid UTF-8");
+                    
+                    let record_string = format!("@{}\n{}\n+\n{}\n", record_id, sequence, quality);
+                    write!(writer, "{}", record_string)
+                        .expect("Failed to write sequence record");
+                }
             }
         });
         self.thread_handles.push(handle);
     }
 
-    /// Start controlled write thread with thread pool management
+    /// Start controlled write thread with thread pool management - memory optimized
     fn start_writing_thread_controlled(&mut self, mut writer: BufWriter<GzEncoder<File>>, receiver: Receiver<ReadInfo>, thread_pool: &mut ThreadPoolManager) {
         if let Some(handle) = thread_pool.spawn_controlled_thread(move || {
             for read_info in receiver.iter() {
-                let record_id = read_info.output_record.id();
-                let sequence = std::str::from_utf8(read_info.output_record.seq())
-                    .expect("Sequence is not valid UTF-8");
-                let quality = std::str::from_utf8(read_info.output_record.qual())
-                    .expect("Quality scores are not valid UTF-8");
-                
-                let record_string = format!("@{}\n{}\n+\n{}\n", record_id, sequence, quality);
-                write!(writer, "{}", record_string)
-                    .expect("Failed to write sequence record");
+                if let Some(output_record) = read_info.get_output_record() {
+                    let record_id = output_record.id();
+                    let sequence = std::str::from_utf8(output_record.seq())
+                        .expect("Sequence is not valid UTF-8");
+                    let quality = std::str::from_utf8(output_record.qual())
+                        .expect("Quality scores are not valid UTF-8");
+                    
+                    let record_string = format!("@{}\n{}\n+\n{}\n", record_id, sequence, quality);
+                    write!(writer, "{}", record_string)
+                        .expect("Failed to write sequence record");
+                }
             }
         }) {
             self.thread_handles.push(handle);

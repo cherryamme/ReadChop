@@ -32,10 +32,11 @@ pub fn handle_view_command(view_args: &Commands) {
 /// Print single sequence recognition results with color highlighting
 fn print_sequence_result(read_info: &ReadInfo, split_types: &[crate::splitter::SplitType]) {
     // Output sequence ID and length
-    println!("Sequence ID: {} Length: {}", read_info.record.id(), read_info.record.seq().len());
+    println!("Sequence ID: {} Length: {}", read_info.record_id, read_info.sequence_length);
     
     // Get sequence
-    let sequence = read_info.record.seq();
+    let sequence = read_info.sequence.as_ref()
+        .expect("Sequence data not available");
     let mut barcode_positions = Vec::new();
     
     // Collect all detected barcode positions

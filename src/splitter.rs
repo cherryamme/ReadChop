@@ -3,7 +3,7 @@ use crate::myers::myers_best;
 use crate::myers::SearchPattern;
 use crate::pattern::{PatternArgument, PatternConfiguration};
 use crate::thread_pool::ThreadPoolManager;
-use bio::io::fastq::Record;
+// use bio::io::fastq::Record; // No longer needed with optimized ReadInfo structure
 use flume::Receiver;
 use std::cmp::min;
 use std::collections::HashMap;
@@ -238,15 +238,15 @@ fn find_matcher(
     matcher
 }
 
-/// Execute sequence splitting
+/// Execute sequence splitting - memory optimized
 fn perform_sequence_splitting(
-    record: &Record, 
+    sequence: &[u8], 
     read_chunk: &ReadChunk, 
     pattern_argument: &PatternArgument
 ) -> SplitType {
     let pattern_database = &pattern_argument.pattern_database;
     let mut search_pattern = SearchPattern::new(
-        record.seq().to_vec(), 
+        sequence.to_vec(), 
         pattern_argument.pattern_error_rate.0
     );
     
@@ -265,7 +265,7 @@ fn perform_sequence_splitting(
     search_pattern.dist_ratio = pattern_argument.pattern_error_rate.1;
     let right_matcher = find_matcher(
         read_chunk.right_bound,
-        record.seq().len(),
+        sequence.len(),
         &pattern_database.reverse_patterns,
         &mut search_pattern,
         read_chunk.use_position_mutation,
@@ -282,7 +282,7 @@ fn perform_sequence_splitting(
     split_type
 }
 
-/// Execute sequence splitting vector
+/// Execute sequence splitting vector - memory optimized
 pub fn perform_sequence_splitting_vector(
     read_info: &ReadInfo, 
     pattern_config: &PatternConfiguration
@@ -290,8 +290,12 @@ pub fn perform_sequence_splitting_vector(
     let mut split_types = Vec::new();
     let mut read_chunk = ReadChunk::new(pattern_config, read_info);
     
+    // Get sequence data only when needed
+    let sequence = read_info.sequence.as_ref()
+        .expect("Sequence data not available");
+    
     for pattern_argument in &pattern_config.pattern_arguments {
-        let split_type = perform_sequence_splitting(&read_info.record, &read_chunk, pattern_argument);
+        let split_type = perform_sequence_splitting(sequence, &read_chunk, pattern_argument);
         
         if pattern_argument.use_position_info
             && split_type.left_matcher.status
@@ -310,7 +314,7 @@ pub fn perform_sequence_splitting_vector(
     split_types
 }
 
-/// Detect fusion sequence
+/// Detect fusion sequence - memory optimized
 fn detect_fusion_sequence(read_info: &ReadInfo, pattern_config: &PatternConfiguration) -> bool {
     let (middle_start, middle_end) = read_info.sequence_window;
     
@@ -319,8 +323,10 @@ fn detect_fusion_sequence(read_info: &ReadInfo, pattern_config: &PatternConfigur
     }
     
     let fusion_database = &pattern_config.fusion_database.fusion_patterns;
+    let sequence = read_info.sequence.as_ref()
+        .expect("Sequence data not available");
     let mut search_pattern = SearchPattern::new(
-        read_info.record.seq().to_vec(), 
+        sequence.to_vec(), 
         pattern_config.fusion_error_rate
     );
 
