@@ -111,7 +111,7 @@ pub enum Commands {
     },
     /// Preview barcode detection results (with color highlighting)
     View {
-        /// 输入文件路径
+        /// Input file paths
         #[arg(short, long, num_args = 1.., value_delimiter = ' ')]
         inputs: Vec<String>,
         /// Pattern file list
@@ -120,7 +120,7 @@ pub enum Commands {
         /// Pattern database file
         #[arg(short = 'd', long = "db", required = true)]
         pattern_db_file: String,
-        /// 线程数量
+        /// Number of threads
         #[arg(short, long, default_value = "20")]
         threads: usize,
         /// Minimum sequence length filter threshold

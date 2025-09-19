@@ -60,13 +60,13 @@ fn execute_main_processing(args: &args::Args) {
     let search_patterns = pattern::load_patterns(args);
     info!("Pattern database loaded successfully");
     
-    // 创建线程监控器，使用均衡分配策略
+    // Create thread monitor with balanced allocation strategy
     let thread_strategy = ThreadAllocationStrategy::Balanced { 
-        processing_ratio: 0.8  // 80%用于处理，20%用于写入
+        processing_ratio: 0.8  // 80% for processing, 20% for writing
     };
     let mut thread_monitor = ThreadMonitor::new(args.threads, thread_strategy);
     
-    // 打印线程分配信息
+    // Print thread allocation information
     thread_monitor.print_thread_stats();
     
     // Create FASTQ reader

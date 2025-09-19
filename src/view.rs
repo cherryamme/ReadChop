@@ -5,40 +5,40 @@ use crate::splitter::perform_sequence_splitting_vector;
 use flume::Receiver;
 use log::info;
 
-/// 处理view子命令，实时预览条形码识别结果
+/// Handle view subcommand, real-time preview of barcode recognition results
 pub fn handle_view_command(view_args: &Commands) {
     info!("Starting preview mode, displaying barcode recognition results in real-time");
     
-    // 构建模式配置
+    // Build pattern configuration
     let pattern_config = PatternConfiguration::new_from_view_args(view_args);
     
-    // 创建FASTQ读取器
+    // Create FASTQ reader
     let inputs = match view_args {
         Commands::View { inputs, .. } => inputs.clone(),
         _ => return,
     };
     let read_receiver: Receiver<ReadInfo> = crate::fastq::create_reader(inputs);
     
-    // 处理每个序列
+    // Process each sequence
     for read_info in read_receiver.iter() {
-        // 执行条形码识别
+        // Execute barcode recognition
         let split_types = perform_sequence_splitting_vector(&read_info, &pattern_config);
         
-        // 输出结果
+        // Output results
         print_sequence_result(&read_info, &split_types);
     }
 }
 
-/// 打印单个序列的识别结果，包含颜色高亮
+/// Print single sequence recognition results with color highlighting
 fn print_sequence_result(read_info: &ReadInfo, split_types: &[crate::splitter::SplitType]) {
-    // 输出序列ID和长度
+    // Output sequence ID and length
     println!("Sequence ID: {} Length: {}", read_info.record.id(), read_info.record.seq().len());
     
-    // 获取序列
+    // Get sequence
     let sequence = read_info.record.seq();
     let mut barcode_positions = Vec::new();
     
-    // 收集所有检测到的条形码位置
+    // Collect all detected barcode positions
     for split_type in split_types {
         if split_type.left_matcher.status {
             barcode_positions.push((
@@ -58,22 +58,22 @@ fn print_sequence_result(read_info: &ReadInfo, split_types: &[crate::splitter::S
         }
     }
     
-    // 按位置排序
+    // Sort by position
     barcode_positions.sort_by_key(|x| x.0);
     
-    // 构建高亮序列
-    let red_start = "\x1b[31m";  // 红色开始
-    let red_end = "\x1b[0m";     // 颜色结束
+    // Build highlighted sequence
+    let red_start = "\x1b[31m";  // Red start
+    let red_end = "\x1b[0m";     // Color end
     let mut highlighted_sequence = String::new();
     let mut last_position = 0;
     
     for (start, end, _pattern_name, _errors) in &barcode_positions {
-        // 添加条形码前的序列
+        // Add sequence before barcode
         if *start > last_position {
             highlighted_sequence.push_str(&String::from_utf8_lossy(&sequence[last_position..*start]));
         }
         
-        // 添加红色高亮的条形码
+        // Add red highlighted barcode
         let barcode_sequence = &sequence[*start..*end];
         highlighted_sequence.push_str(&format!(
             "{}{}{}",
@@ -85,12 +85,12 @@ fn print_sequence_result(read_info: &ReadInfo, split_types: &[crate::splitter::S
         last_position = *end;
     }
     
-    // 添加剩余序列
+    // Add remaining sequence
     if last_position < sequence.len() {
         highlighted_sequence.push_str(&String::from_utf8_lossy(&sequence[last_position..]));
     }
     
-    // 智能截断：保持ANSI转义序列的完整性
+    // Smart truncation: preserve ANSI escape sequence integrity
     if highlighted_sequence.len() > 200 {
         let truncated = smart_truncate_preserve_ansi(&highlighted_sequence, 200);
         println!("Sequence: {}", truncated);
@@ -98,7 +98,7 @@ fn print_sequence_result(read_info: &ReadInfo, split_types: &[crate::splitter::S
         println!("Sequence: {}", highlighted_sequence);
     }
     
-    // 输出检测到的模式信息
+    // Output detected pattern information
     print!("Detected patterns: ");
     for (i, split_type) in split_types.iter().enumerate() {
         if i > 0 {
@@ -127,16 +127,16 @@ fn print_sequence_result(read_info: &ReadInfo, split_types: &[crate::splitter::S
         }
     }
     println!();
-    println!(); // 空行分隔
+    println!(); // Empty line separator
 }
 
-/// 智能截断字符串，保持ANSI转义序列的完整性
+/// Smart truncate string while preserving ANSI escape sequence integrity
 fn smart_truncate_preserve_ansi(text: &str, max_length: usize) -> String {
     if text.len() <= max_length {
         return text.to_string();
     }
     
-    // 简单截断：取前100个字符 + "..." + 后100个字符
+    // Simple truncation: take first 100 characters + "..." + last 100 characters
     let front_length = 100;
     let back_length = 100;
     
@@ -151,7 +151,7 @@ fn smart_truncate_preserve_ansi(text: &str, max_length: usize) -> String {
 }
 
 impl PatternConfiguration {
-    /// 从View命令参数创建模式配置
+    /// Create pattern configuration from View command arguments
     pub fn new_from_view_args(view_args: &Commands) -> PatternConfiguration {
         let (window_size, pattern_match_types, trim_mode, pattern_error_rates, 
              max_distances, position_shifts, min_length, id_separator, 
@@ -203,7 +203,7 @@ impl PatternConfiguration {
             pattern_match_types,
             pattern_arguments: vec![],
             trim_mode,
-            write_type: "names".to_string(), // view模式不需要写入文件
+            write_type: "names".to_string(), // view mode doesn't need to write files
             pattern_error_rates,
             max_distances,
             position_shifts,
@@ -215,7 +215,7 @@ impl PatternConfiguration {
         
         pattern_config.normalize_vectors();
         
-        // 加载模式数据库
+        // Load pattern database
         info!("Loading pattern database file: {}", pattern_db_file);
         for pattern_file in &pattern_files {
             let mut pattern_database = crate::pattern::PatternDatabase::new();

@@ -115,9 +115,9 @@ impl FileWriterManager {
 
     /// Create controlled writer for filename with thread pool management
     fn create_writer_for_filename_controlled(&mut self, output_filename: &str, thread_pool: &mut ThreadPoolManager) {
-        // 检查是否可以创建新的写入线程
+        // Check if new writing thread can be created
         if !thread_pool.can_spawn_thread() {
-            info!("无法创建新的写入线程，线程池已满");
+            // info!("Cannot create new writing thread, thread pool is full");
             return;
         }
 
@@ -174,7 +174,7 @@ impl FileWriterManager {
         }) {
             self.thread_handles.push(handle);
         } else {
-            info!("无法创建受控的写入线程");
+            info!("Cannot create controlled writing thread");
         }
     }
 

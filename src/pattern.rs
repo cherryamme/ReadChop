@@ -229,19 +229,19 @@ pub struct FusionDatabase {
 }
 
 impl FusionDatabase {
-    /// 创建新的融合数据库
+    /// Create new fusion database
     pub fn new() -> Self {
         Self {
             fusion_patterns: HashMap::new(),
         }
     }
     
-    /// 检查数据库是否为空
+    /// Check if database is empty
     pub fn is_empty(&self) -> bool {
         self.fusion_patterns.is_empty()
     }
     
-    /// 加载融合模式数据
+    /// Load fusion pattern data
     pub fn load_fusion_patterns(&mut self, database_file: &str, fusion_file: &str) {
         let pattern_database = self.load_database(database_file);
         self.load_fusion_file(fusion_file, pattern_database);
@@ -266,7 +266,7 @@ impl FusionDatabase {
         pattern_database
     }
     
-    /// 加载融合文件
+    /// Load fusion file
     fn load_fusion_file(&mut self, file_path: &str, pattern_database: HashMap<String, String>) {
         let mut reader = csv::ReaderBuilder::new()
             .has_headers(true)
@@ -286,13 +286,13 @@ impl FusionDatabase {
     }
 }
 
-/// 加载模式配置
+/// Load pattern configuration
 pub fn load_patterns(args: &Args) -> PatternConfiguration {
     info!("Loading pattern database file: {}", args.get_pattern_db_file());
     
     let mut pattern_config = PatternConfiguration::new(args);
     
-    // 加载融合数据库
+    // Load fusion database
     if args.is_fusion_detection_enabled() {
         pattern_config.fusion_database.load_fusion_patterns(
             &args.get_pattern_db_file(), 
@@ -300,7 +300,7 @@ pub fn load_patterns(args: &Args) -> PatternConfiguration {
         );
     }
     
-    // 加载模式文件
+    // Load pattern files
     for pattern_file in args.get_pattern_files() {
         let mut pattern_database = PatternDatabase::new();
         pattern_database.load_patterns(&args.get_pattern_db_file(), &pattern_file);
@@ -324,11 +324,11 @@ mod tests {
     
     #[test]
     fn test_pattern_configuration_creation() {
-        // 这里可以添加测试代码
+        // Test code can be added here
     }
     
     #[test]
     fn test_pattern_database_loading() {
-        // 这里可以添加测试代码
+        // Test code can be added here
     }
 }

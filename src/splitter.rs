@@ -282,7 +282,7 @@ fn perform_sequence_splitting(
     split_type
 }
 
-/// Execute sequence splitting向量
+/// Execute sequence splitting vector
 pub fn perform_sequence_splitting_vector(
     read_info: &ReadInfo, 
     pattern_config: &PatternConfiguration
@@ -396,7 +396,7 @@ pub fn create_splitter_receiver_controlled(
 ) -> Receiver<ReadInfo> {
     let (sender, receiver) = flume::unbounded();
     
-    // 分配线程资源
+    // Allocate thread resources
     let allocated_threads = thread_pool.allocate_threads(thread_count);
     
     for _thread_id in 0..allocated_threads {
@@ -405,7 +405,7 @@ pub fn create_splitter_receiver_controlled(
         let sender = sender.clone();
         let pattern_config = pattern_config.clone();
         
-        // 使用受控的线程创建
+        // Use controlled thread creation
         if let Some(_handle) = thread_pool.spawn_controlled_thread(move || {
             let mut _processed_count = 0;
             
@@ -436,9 +436,9 @@ pub fn create_splitter_receiver_controlled(
             let _elapsed_time = start_time.elapsed();
             // Thread processing complete, no log output to avoid interference
         }) {
-            // 线程创建成功，继续处理
+            // Thread creation successful, continue processing
         } else {
-            // 线程创建失败，释放资源
+            // Thread creation failed, release resources
             thread_pool.release_threads(1);
         }
     }

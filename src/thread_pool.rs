@@ -3,20 +3,20 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::thread;
 use log::info;
 
-/// 线程池管理器
+/// Thread pool manager
 pub struct ThreadPoolManager {
-    /// 总线程数限制
+    /// Maximum thread count limit
     max_threads: usize,
-    /// 当前活跃线程数
+    /// Current active thread count
     active_threads: Arc<AtomicUsize>,
-    /// 线程句柄存储
+    /// Thread handle storage
     _thread_handles: Vec<thread::JoinHandle<()>>,
 }
 
 impl ThreadPoolManager {
-    /// 创建新的线程池管理器
+    /// Create new thread pool manager
     pub fn new(max_threads: usize) -> Self {
-        info!("创建线程池管理器，最大线程数: {}", max_threads);
+        // info!("Creating thread pool manager, max threads: {}", max_threads);
         Self {
             max_threads,
             active_threads: Arc::new(AtomicUsize::new(0)),
@@ -24,12 +24,12 @@ impl ThreadPoolManager {
         }
     }
 
-    /// 获取当前活跃线程数
+    /// Get current active thread count
     pub fn get_active_thread_count(&self) -> usize {
         self.active_threads.load(Ordering::Relaxed)
     }
 
-    /// 获取剩余可用线程数
+    /// Get remaining available thread count
     pub fn get_available_threads(&self) -> usize {
         let active = self.active_threads.load(Ordering::Relaxed);
         if active < self.max_threads {
@@ -39,12 +39,12 @@ impl ThreadPoolManager {
         }
     }
 
-    /// 检查是否可以创建新线程
+    /// Check if new thread can be created
     pub fn can_spawn_thread(&self) -> bool {
         self.active_threads.load(Ordering::Relaxed) < self.max_threads
     }
 
-    /// 分配线程资源
+    /// Allocate thread resources
     pub fn allocate_threads(&self, requested_threads: usize) -> usize {
         let available = self.get_available_threads();
         let allocated = std::cmp::min(requested_threads, available);
@@ -54,14 +54,14 @@ impl ThreadPoolManager {
         allocated
     }
 
-    /// 释放线程资源
+    /// Release thread resources
     pub fn release_threads(&self, count: usize) {
         if count > 0 {
             self.active_threads.fetch_sub(count, Ordering::Relaxed);
         }
     }
 
-    /// 创建受控的线程
+    /// Create controlled thread
     pub fn spawn_controlled_thread<F, T>(&mut self, f: F) -> Option<thread::JoinHandle<T>>
     where
         F: FnOnce() -> T + Send + 'static,
@@ -83,14 +83,14 @@ impl ThreadPoolManager {
         Some(handle)
     }
 
-    /// 等待所有线程完成
+    /// Wait for all threads to complete
     pub fn wait_for_completion(&mut self) {
         for handle in self._thread_handles.drain(..) {
-            handle.join().expect("线程执行失败");
+            handle.join().expect("Thread execution failed");
         }
     }
 
-    /// 获取线程使用统计
+    /// Get thread usage statistics
     pub fn get_thread_stats(&self) -> (usize, usize, usize) {
         let active = self.active_threads.load(Ordering::Relaxed);
         let available = self.get_available_threads();
@@ -98,17 +98,17 @@ impl ThreadPoolManager {
     }
 }
 
-/// 线程分配策略
+/// Thread allocation strategy
 pub enum ThreadAllocationStrategy {
-    /// 均衡分配：处理线程和写入线程按比例分配
+    /// Balanced allocation: processing and writing threads allocated by ratio
     Balanced {
-        processing_ratio: f32,  // 处理线程占比 (0.0-1.0)
+        processing_ratio: f32,  // Processing thread ratio (0.0-1.0)
     },
-    /// 优先级分配：优先保证处理线程，剩余给写入线程
+    /// Priority allocation: prioritize processing threads, remaining for writing threads
     Priority {
-        min_processing_threads: usize,  // 最少处理线程数
+        min_processing_threads: usize,  // Minimum processing thread count
     },
-    /// 固定分配：固定数量的处理线程和写入线程
+    /// Fixed allocation: fixed number of processing and writing threads
     Fixed {
         processing_threads: usize,
         writing_threads: usize,
@@ -116,7 +116,7 @@ pub enum ThreadAllocationStrategy {
 }
 
 impl ThreadAllocationStrategy {
-    /// 计算线程分配
+    /// Calculate thread allocation
     pub fn calculate_allocation(&self, total_threads: usize) -> (usize, usize) {
         match self {
             ThreadAllocationStrategy::Balanced { processing_ratio } => {
@@ -136,7 +136,7 @@ impl ThreadAllocationStrategy {
     }
 }
 
-/// 线程使用监控器
+/// Thread usage monitor
 pub struct ThreadMonitor {
     thread_pool: ThreadPoolManager,
     _allocation_strategy: ThreadAllocationStrategy,
@@ -145,12 +145,12 @@ pub struct ThreadMonitor {
 }
 
 impl ThreadMonitor {
-    /// 创建新的线程监控器
+    /// Create new thread monitor
     pub fn new(total_threads: usize, strategy: ThreadAllocationStrategy) -> Self {
         let (processing_threads, writing_threads) = strategy.calculate_allocation(total_threads);
         
         info!(
-            "线程分配策略: 总线程数={}, 处理线程={}, 写入线程={}", 
+            "Thread allocation strategy: total_threads={}, processing_threads={}, writing_threads={}", 
             total_threads, processing_threads, writing_threads
         );
 
@@ -162,26 +162,26 @@ impl ThreadMonitor {
         }
     }
 
-    /// 获取处理线程数
+    /// Get processing thread count
     pub fn get_processing_threads(&self) -> usize {
         self.processing_threads
     }
 
-    /// 获取写入线程数
+    /// Get writing thread count
     pub fn get_writing_threads(&self) -> usize {
         self.writing_threads
     }
 
-    /// 获取线程池管理器
+    /// Get thread pool manager
     pub fn get_thread_pool(&mut self) -> &mut ThreadPoolManager {
         &mut self.thread_pool
     }
 
-    /// 打印线程使用统计
+    /// Print thread usage statistics
     pub fn print_thread_stats(&self) {
         let (max, active, available) = self.thread_pool.get_thread_stats();
         info!(
-            "线程使用统计: 最大={}, 活跃={}, 可用={}, 处理线程={}, 写入线程={}",
+            "Thread usage statistics: max={}, active={}, available={}, processing_threads={}, writing_threads={}",
             max, active, available, self.processing_threads, self.writing_threads
         );
     }
