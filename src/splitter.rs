@@ -7,7 +7,6 @@ use crate::thread_pool::ThreadPoolManager;
 use flume::Receiver;
 use std::cmp::min;
 use std::collections::HashMap;
-use std::thread;
 use std::time::Instant;
 
 /// Read block structure for defining search range
@@ -344,54 +343,6 @@ fn detect_fusion_sequence(read_info: &ReadInfo, pattern_config: &PatternConfigur
     middle_matcher.status
 }
 
-/// Create splitter receiver
-pub fn create_splitter_receiver(
-    read_receiver: Receiver<ReadInfo>,
-    pattern_config: &PatternConfiguration,
-    thread_count: usize,
-) -> Receiver<ReadInfo> {
-    let (sender, receiver) = flume::unbounded();
-    
-    for _thread_id in 0..thread_count {
-        let start_time = Instant::now();
-        let read_receiver = read_receiver.clone();
-        let sender = sender.clone();
-        let pattern_config = pattern_config.clone();
-        
-        thread::spawn(move || {
-            let mut _processed_count = 0;
-            
-            for mut read_info in read_receiver.iter() {
-                read_info.split_types = perform_sequence_splitting_vector(&read_info, &pattern_config);
-                
-                // Update sequence information
-                read_info.update(
-                    &pattern_config.pattern_match_types,
-                    &pattern_config.write_type,
-                    pattern_config.trim_mode,
-                    pattern_config.min_length,
-                    &pattern_config.id_separator,
-                );
-                
-                // Detect fusion sequence
-                if !pattern_config.fusion_database.is_empty() 
-                    && detect_fusion_sequence(&read_info, &pattern_config) 
-                {
-                    read_info.sequence_type = "fusion".into();
-                    read_info.should_write_to_fastq = false;
-                }
-                
-                sender.send(read_info).expect("Failed to send sequence information");
-                _processed_count += 1;
-            }
-            
-            let _elapsed_time = start_time.elapsed();
-            // Thread processing complete, no log output to avoid interference
-        });
-    }
-    
-    receiver
-}
 
 /// Create controlled splitter receiver with thread pool management
 pub fn create_splitter_receiver_controlled(

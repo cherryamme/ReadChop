@@ -24,10 +24,6 @@ impl ThreadPoolManager {
         }
     }
 
-    /// Get current active thread count
-    pub fn get_active_thread_count(&self) -> usize {
-        self.active_threads.load(Ordering::Relaxed)
-    }
 
     /// Get remaining available thread count
     pub fn get_available_threads(&self) -> usize {
@@ -84,11 +80,6 @@ impl ThreadPoolManager {
     }
 
     /// Wait for all threads to complete
-    pub fn wait_for_completion(&mut self) {
-        for handle in self._thread_handles.drain(..) {
-            handle.join().expect("Thread execution failed");
-        }
-    }
 
     /// Get thread usage statistics
     pub fn get_thread_stats(&self) -> (usize, usize, usize) {
@@ -104,15 +95,6 @@ pub enum ThreadAllocationStrategy {
     Balanced {
         processing_ratio: f32,  // Processing thread ratio (0.0-1.0)
     },
-    /// Priority allocation: prioritize processing threads, remaining for writing threads
-    Priority {
-        min_processing_threads: usize,  // Minimum processing thread count
-    },
-    /// Fixed allocation: fixed number of processing and writing threads
-    Fixed {
-        processing_threads: usize,
-        writing_threads: usize,
-    },
 }
 
 impl ThreadAllocationStrategy {
@@ -123,14 +105,6 @@ impl ThreadAllocationStrategy {
                 let processing_threads = (total_threads as f32 * processing_ratio) as usize;
                 let writing_threads = total_threads - processing_threads;
                 (processing_threads.max(1), writing_threads)
-            }
-            ThreadAllocationStrategy::Priority { min_processing_threads } => {
-                let processing_threads = std::cmp::max(*min_processing_threads, total_threads / 2);
-                let writing_threads = total_threads - processing_threads;
-                (processing_threads, writing_threads)
-            }
-            ThreadAllocationStrategy::Fixed { processing_threads, writing_threads } => {
-                (*processing_threads, *writing_threads)
             }
         }
     }
