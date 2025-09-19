@@ -7,10 +7,12 @@ mod myers;
 mod splitter;
 mod writer;
 mod view;
+mod thread_pool;
 
 use clap::Parser;
 use log::info;
 use utils::ProcessInfo;
+use thread_pool::{ThreadMonitor, ThreadAllocationStrategy};
 
 fn main() {
     // Initialize logging system
@@ -58,19 +60,33 @@ fn execute_main_processing(args: &args::Args) {
     let search_patterns = pattern::load_patterns(args);
     info!("Pattern database loaded successfully");
     
+    // 创建线程监控器，使用均衡分配策略
+    let thread_strategy = ThreadAllocationStrategy::Balanced { 
+        processing_ratio: 0.8  // 80%用于处理，20%用于写入
+    };
+    let mut thread_monitor = ThreadMonitor::new(args.threads, thread_strategy);
+    
+    // 打印线程分配信息
+    thread_monitor.print_thread_stats();
+    
     // Create FASTQ reader
     let read_receiver = fastq::create_reader(args.inputs.clone());
     
-    // Create sequence splitter
-    let split_receiver = splitter::create_splitter_receiver(
+    // Create sequence splitter with controlled thread count
+    let split_receiver = splitter::create_splitter_receiver_controlled(
         read_receiver, 
         &search_patterns, 
-        args.threads
+        thread_monitor.get_processing_threads(),
+        thread_monitor.get_thread_pool()
     );
     
-    // Initialize statistics and write manager
+    // Initialize statistics and write manager with controlled thread count
     let mut statistics_manager = counter::StatisticsManager::new(args.outdir.clone());
-    let mut file_writer_manager = writer::FileWriterManager::new(args.outdir.clone());
+    let mut file_writer_manager = writer::FileWriterManager::new_controlled(
+        args.outdir.clone(),
+        thread_monitor.get_writing_threads(),
+        thread_monitor.get_thread_pool()
+    );
     let mut progress_tracker = ProcessInfo::new(args.log_interval);
     
     // Process each sequence
@@ -81,8 +97,8 @@ fn execute_main_processing(args: &args::Args) {
         // Update statistics
         statistics_manager.process_read(&read_info);
         
-        // Write file
-        file_writer_manager.write(read_info)
+        // Write file with controlled thread management
+        file_writer_manager.write_controlled(read_info, thread_monitor.get_thread_pool())
             .expect("Failed to write sequence information");
         
         // Update progress

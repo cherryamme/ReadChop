@@ -2,6 +2,7 @@ use crate::fastq::ReadInfo;
 use crate::myers::myers_best;
 use crate::myers::SearchPattern;
 use crate::pattern::{PatternArgument, PatternConfiguration};
+use crate::thread_pool::ThreadPoolManager;
 use bio::io::fastq::Record;
 use flume::Receiver;
 use std::cmp::min;
@@ -381,6 +382,65 @@ pub fn create_splitter_receiver(
             let _elapsed_time = start_time.elapsed();
             // Thread processing complete, no log output to avoid interference
         });
+    }
+    
+    receiver
+}
+
+/// Create controlled splitter receiver with thread pool management
+pub fn create_splitter_receiver_controlled(
+    read_receiver: Receiver<ReadInfo>,
+    pattern_config: &PatternConfiguration,
+    thread_count: usize,
+    thread_pool: &mut ThreadPoolManager,
+) -> Receiver<ReadInfo> {
+    let (sender, receiver) = flume::unbounded();
+    
+    // 分配线程资源
+    let allocated_threads = thread_pool.allocate_threads(thread_count);
+    
+    for _thread_id in 0..allocated_threads {
+        let start_time = Instant::now();
+        let read_receiver = read_receiver.clone();
+        let sender = sender.clone();
+        let pattern_config = pattern_config.clone();
+        
+        // 使用受控的线程创建
+        if let Some(_handle) = thread_pool.spawn_controlled_thread(move || {
+            let mut _processed_count = 0;
+            
+            for mut read_info in read_receiver.iter() {
+                read_info.split_types = perform_sequence_splitting_vector(&read_info, &pattern_config);
+                
+                // Update sequence information
+                read_info.update(
+                    &pattern_config.pattern_match_types,
+                    &pattern_config.write_type,
+                    pattern_config.trim_mode,
+                    pattern_config.min_length,
+                    &pattern_config.id_separator,
+                );
+                
+                // Detect fusion sequence
+                if !pattern_config.fusion_database.is_empty() 
+                    && detect_fusion_sequence(&read_info, &pattern_config) 
+                {
+                    read_info.sequence_type = "fusion".into();
+                    read_info.should_write_to_fastq = false;
+                }
+                
+                sender.send(read_info).expect("Failed to send sequence information");
+                _processed_count += 1;
+            }
+            
+            let _elapsed_time = start_time.elapsed();
+            // Thread processing complete, no log output to avoid interference
+        }) {
+            // 线程创建成功，继续处理
+        } else {
+            // 线程创建失败，释放资源
+            thread_pool.release_threads(1);
+        }
     }
     
     receiver
