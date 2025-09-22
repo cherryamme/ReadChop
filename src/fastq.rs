@@ -89,6 +89,17 @@ fn create_decoder<R: Read + 'static>(
     }
 }
 
+/// Lightweight statistics structure for memory optimization
+#[derive(Debug, Clone)]
+pub struct ReadInfoStats {
+    pub record_id: String,
+    pub sequence_type: String,
+    pub sequence_length: usize,
+    pub match_types: Vec<String>,
+    pub match_names: Vec<String>,
+    pub strand_orientation: String,
+}
+
 /// Sequence information structure - optimized for memory efficiency
 #[derive(Debug)]
 pub struct ReadInfo {
@@ -160,6 +171,31 @@ impl ReadInfo {
         if !self.should_write_to_fastq {
             self.sequence = None;
             self.quality = None;
+        }
+    }
+    
+    /// Clear large data to free memory - new method for memory optimization
+    pub fn clear_large_data(&mut self) {
+        // Clear sequence and quality data regardless of write status
+        // These are the largest memory consumers
+        self.sequence = None;
+        self.quality = None;
+        
+        // Clear split_types if not needed for final output
+        if !self.should_write_to_fastq {
+            self.split_types.clear();
+        }
+    }
+    
+    /// Create lightweight copy for statistics - memory optimized
+    pub fn create_stats_copy(&self) -> ReadInfoStats {
+        ReadInfoStats {
+            record_id: self.record_id.clone(),
+            sequence_type: self.sequence_type.clone(),
+            sequence_length: self.sequence_length,
+            match_types: self.match_types.clone(),
+            match_names: self.match_names.clone(),
+            strand_orientation: self.strand_orientation.clone(),
         }
     }
     

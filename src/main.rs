@@ -89,13 +89,17 @@ fn execute_main_processing(args: &args::Args) {
     );
     let mut progress_tracker = ProcessInfo::new(args.log_interval);
     
-    // Process each sequence
+    // Process each sequence - memory optimized
+    let mut processed_count = 0;
     for read_info in split_receiver {
+        // Create lightweight stats copy for statistics
+        let read_stats = read_info.create_stats_copy();
+        
         // Log record
         file_writer_manager.logger.push(read_info.to_tsv());
         
-        // Update statistics
-        statistics_manager.process_read(&read_info);
+        // Update statistics using lightweight structure
+        statistics_manager.process_read_stats(&read_stats);
         
         // Write file with controlled thread management
         file_writer_manager.write_controlled(read_info, thread_monitor.get_thread_pool())
@@ -103,6 +107,13 @@ fn execute_main_processing(args: &args::Args) {
         
         // Update progress
         progress_tracker.info();
+        
+        // Periodic memory cleanup - unified frequency for better performance
+        processed_count += 1;
+        if processed_count % 500000 == 0 {
+            file_writer_manager.cleanup_memory();
+            statistics_manager.cleanup_memory();
+        }
     }
     
     // Complete processing

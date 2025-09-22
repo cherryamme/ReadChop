@@ -3,7 +3,7 @@ use std::fs::File;
 use std::io::Write;
 use flate2::write::GzEncoder;
 use flate2::Compression;
-use log::info;
+use log::{info,debug};
 use std::io::Result;
 use std::path::Path;
 use std::fs::create_dir_all;
@@ -84,7 +84,7 @@ impl FileWriterManager {
             .expect("Failed to create output file");
         
         let encoder = GzEncoder::new(file, Compression::default());
-        let writer = BufWriter::with_capacity(512_000, encoder); // Reduced from 1MB to 512KB
+        let writer = BufWriter::with_capacity(256_000, encoder); // Further reduced to 256KB for memory optimization
         
         self.start_writing_thread_controlled(writer, receiver, thread_pool);
         self.writers.insert(output_filename.to_string(), sender);
@@ -143,6 +143,26 @@ impl FileWriterManager {
         // Wait for all write threads to complete
         for handle in self.thread_handles.drain(..) {
             handle.join().expect("Writing thread panicked");
+        }
+    }
+    
+    /// Clean up memory by clearing completed writers - optimized for performance
+    pub fn cleanup_memory(&mut self) {
+        // Only clean up completed thread handles if we have many
+        if self.thread_handles.len() > 100 {
+            self.thread_handles.retain(|handle| !handle.is_finished());
+        }
+        
+        // Only shrink if capacity is significantly larger than current size
+        if self.thread_handles.capacity() > self.thread_handles.len() * 3 && 
+           self.thread_handles.capacity() > 500 {
+            self.thread_handles.shrink_to_fit();
+        }
+        
+        // Clear logger only if it gets very large
+        if self.logger.len() > 500000 {
+            debug!("Clearing logger to free memory (size: {})", self.logger.len());
+            self.logger.clear();
         }
     }
     
