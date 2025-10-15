@@ -35,8 +35,12 @@ fn main() {
 /// Initialize logging system
 fn initialize_logging() {
     unsafe {
+    // Check if RUST_LOG is already set in environment
+    if std::env::var("RUST_LOG").is_err() {
+        // Only set to "info" if RUST_LOG is not already set
         std::env::set_var("RUST_LOG", "info");
     }
+}
     pretty_env_logger::init();
 }
 

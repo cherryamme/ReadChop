@@ -266,7 +266,12 @@ impl ReadInfo {
             self.sequence_type = "filtered".to_string();
         }
         
-        let (cut_left, cut_right) = self.calculate_trim_positions(trim_mode);
+        let (cut_left, mut cut_right) = self.calculate_trim_positions(trim_mode);
+        
+        // Fix cut_right handling - if cut_right is 0, set it to sequence length
+        if cut_right == 0 {
+            cut_right = self.sequence_length;
+        }
         
         if cut_left > cut_right {
             self.sequence_type = "unknown".to_string();
