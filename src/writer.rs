@@ -30,14 +30,14 @@ pub struct FileWriterManager {
 impl FileWriterManager {
 
     /// Create file write manager
-    pub fn new(output_directory: String) -> Self {
-        info!("Creating writer manager with 4 concurrent write tasks limit...");
+    pub fn new(output_directory: String, writer_threads: usize) -> Self {
+        info!("Creating writer manager with {} concurrent write tasks limit...", writer_threads);
         Self {
             writers: HashMap::new(),
             output_directory,
             logger: Vec::new(),
             task_handles: Vec::new(),
-            write_semaphore: Arc::new(Semaphore::new(4)),
+            write_semaphore: Arc::new(Semaphore::new(writer_threads)),
         }
     }
 
@@ -64,6 +64,14 @@ impl FileWriterManager {
             .expect("Failed to send read info to writer");
         
         Ok(())
+    }
+    
+    /// Expand writer concurrency after splitter completes
+    /// This allows writer to use all available threads
+    pub fn expand_concurrency(&self, additional_threads: usize) {
+        info!("Splitter completed, expanding writer concurrency by {} threads", additional_threads);
+        // Add permits to semaphore to allow more concurrent operations
+        self.write_semaphore.add_permits(additional_threads);
     }
 
     fn start_writing_task(&mut self, file_path: std::path::PathBuf, rx: Receiver<ReadInfo>) {

@@ -87,7 +87,10 @@ async fn execute_main_processing(args: &args::Args) {
     
     // Initialize statistics and write manager
     let mut statistics_manager = counter::StatisticsManager::new(args.outdir.clone());
-    let mut file_writer_manager = writer::FileWriterManager::new(args.outdir.clone());
+    let mut file_writer_manager = writer::FileWriterManager::new(
+        args.outdir.clone(), 
+        thread_monitor.get_writing_threads()
+    );
     let mut progress_tracker = ProcessInfo::new(args.log_interval);
     
     // Process each sequence
@@ -108,6 +111,11 @@ async fn execute_main_processing(args: &args::Args) {
         // Update progress
         progress_tracker.info();
     }
+    
+    // Splitter completed, release processing threads to writer
+    info!("Splitter processing completed, releasing {} threads to writer", 
+          thread_monitor.get_processing_threads());
+    file_writer_manager.expand_concurrency(thread_monitor.get_processing_threads());
     
     // Complete processing
     finalize_processing(
