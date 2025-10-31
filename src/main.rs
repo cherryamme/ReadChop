@@ -14,7 +14,8 @@ use log::info;
 use utils::ProcessInfo;
 use thread_pool::{ThreadMonitor, ThreadAllocationStrategy};
 
-fn main() {
+#[tokio::main]
+async fn main() {
     // Initialize logging system
     initialize_logging();
     
@@ -29,7 +30,7 @@ fn main() {
     }
     
     // Execute main sequence processing workflow
-    execute_main_processing(&args);
+    execute_main_processing(&args).await;
 }
 
 /// Initialize logging system
@@ -57,7 +58,7 @@ fn handle_subcommand(command: &args::Commands) {
 }
 
 /// Execute main sequence processing workflow - memory optimized
-fn execute_main_processing(args: &args::Args) {
+async fn execute_main_processing(args: &args::Args) {
     let start_time = std::time::Instant::now();
     
     // Load pattern database
@@ -100,7 +101,7 @@ fn execute_main_processing(args: &args::Args) {
         // Update statistics using lightweight structure
         statistics_manager.process_read_stats(&read_stats);
         
-        // Write file
+        // Write file (non-blocking)
         file_writer_manager.write(read_info)
             .expect("Failed to write sequence information");
         
@@ -114,18 +115,18 @@ fn execute_main_processing(args: &args::Args) {
         &statistics_manager,
         start_time,
         &args.outdir
-    );
+    ).await;
 }
 
 /// Complete processing and output results
-fn finalize_processing(
+async fn finalize_processing(
     file_writer_manager: &mut writer::FileWriterManager,
     statistics_manager: &counter::StatisticsManager,
     start_time: std::time::Instant,
     output_dir: &str,
 ) {
     // Write log file
-    file_writer_manager.write_log_file(output_dir)
+    file_writer_manager.write_log_file(output_dir).await
         .expect("Failed to write log file");
     
     // Write statistics
@@ -138,8 +139,8 @@ fn finalize_processing(
     let processing_time = start_time.elapsed();
     info!("Sequence splitting completed! Processing time: {:.4?}", processing_time);
     
-    // Wait for all write threads to complete
-    file_writer_manager.drop();
+    // Wait for all write tasks to complete
+    file_writer_manager.finish().await;
     
     let total_time = start_time.elapsed();
     info!("All processing completed! Total time: {:.4?}", total_time);
