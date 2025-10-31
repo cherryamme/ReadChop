@@ -3,12 +3,11 @@ use std::fs::File;
 use std::io::Write;
 use flate2::write::GzEncoder;
 use flate2::Compression;
-use log::{info,debug};
+use log::info;
 use std::io::Result;
 use std::path::Path;
 use std::fs::create_dir_all;
 use crate::fastq::ReadInfo;
-use crate::thread_pool::ThreadPoolManager;
 use std::io::BufWriter;
 use std::thread;
 use flume::{Receiver, Sender, unbounded};
@@ -27,13 +26,9 @@ pub struct FileWriterManager {
 
 impl FileWriterManager {
 
-    /// Create controlled file write manager with thread pool management
-    pub fn new_controlled(
-        output_directory: String, 
-        _max_writing_threads: usize,
-        _thread_pool: &mut ThreadPoolManager
-    ) -> Self {
-        info!("Creating controlled file writer manager, max writing threads: {}", _max_writing_threads);
+    /// Create file write manager
+    pub fn new(output_directory: String) -> Self {
+        info!("Creating writer manager, start writing...");
         Self {
             writers: HashMap::new(),
             output_directory,
@@ -42,9 +37,8 @@ impl FileWriterManager {
         }
     }
 
-
-    /// Write sequence information with controlled thread management
-    pub fn write_controlled(&mut self, read_info: ReadInfo, thread_pool: &mut ThreadPoolManager) -> Result<()> {
+    /// Write sequence information
+    pub fn write(&mut self, read_info: ReadInfo) -> Result<()> {
         if !read_info.should_write_to_fastq {
             return Ok(());
         }
@@ -52,66 +46,54 @@ impl FileWriterManager {
         let output_filename = read_info.output_filename.clone();
         
         if !self.writers.contains_key(&output_filename) {
-            self.create_writer_for_filename_controlled(&output_filename, thread_pool);
+            let (tx, rx) = unbounded();
+            let file_path = Path::new(&self.output_directory)
+                .join(format!("{}.fq.gz", output_filename));
+            let file_directory = file_path.parent().unwrap();
+            
+            create_dir_all(&file_directory)
+                .expect("Failed to create output directory");
+            
+            let file = File::create(&file_path)
+                .expect("Failed to create output file");
+            
+            let encoder = GzEncoder::new(file, Compression::default());
+            let writer = BufWriter::with_capacity(1_000_000, encoder);
+            
+            self.start_writing_thread(writer, rx);
+            self.writers.insert(output_filename.clone(), tx);
         }
         
-        if let Some(sender) = self.writers.get(&output_filename) {
-            sender.send(read_info)
-                .expect("Failed to send sequence information to writer");
-        }
+        self.writers.get(&output_filename).unwrap()
+            .send(read_info)
+            .expect("Failed to send read info to writer");
         
         Ok(())
     }
 
-
-    /// Create controlled writer for filename with thread pool management
-    fn create_writer_for_filename_controlled(&mut self, output_filename: &str, thread_pool: &mut ThreadPoolManager) {
-        // Check if new writing thread can be created
-        if !thread_pool.can_spawn_thread() {
-            // info!("Cannot create new writing thread, thread pool is full");
-            return;
-        }
-
-        let (sender, receiver) = unbounded();
-        let file_path = Path::new(&self.output_directory)
-            .join(format!("{}.fq.gz", output_filename));
-        let file_directory = file_path.parent().unwrap();
-        
-        create_dir_all(&file_directory)
-            .expect("Failed to create output directory");
-        
-        let file = File::create(&file_path)
-            .expect("Failed to create output file");
-        
-        let encoder = GzEncoder::new(file, Compression::default());
-        let writer = BufWriter::with_capacity(256_000, encoder); // Further reduced to 256KB for memory optimization
-        
-        self.start_writing_thread_controlled(writer, receiver, thread_pool);
-        self.writers.insert(output_filename.to_string(), sender);
-    }
-
-
-    /// Start controlled write thread with thread pool management - memory optimized
-    fn start_writing_thread_controlled(&mut self, mut writer: BufWriter<GzEncoder<File>>, receiver: Receiver<ReadInfo>, thread_pool: &mut ThreadPoolManager) {
-        if let Some(handle) = thread_pool.spawn_controlled_thread(move || {
-            for read_info in receiver.iter() {
+    fn start_writing_thread(&mut self, mut writer: BufWriter<GzEncoder<File>>, rx: Receiver<ReadInfo>) {
+        let handle = thread::spawn(move || {
+            for read_info in rx.iter() {
                 if let Some(output_record) = read_info.get_output_record() {
-                    let record_id = output_record.id();
-                    let sequence = std::str::from_utf8(output_record.seq())
-                        .expect("Sequence is not valid UTF-8");
-                    let quality = std::str::from_utf8(output_record.qual())
-                        .expect("Quality scores are not valid UTF-8");
-                    
-                    let record_string = format!("@{}\n{}\n+\n{}\n", record_id, sequence, quality);
-                    write!(writer, "{}", record_string)
-                        .expect("Failed to write sequence record");
+                    let id = output_record.id();
+                    let seq = std::str::from_utf8(output_record.seq())
+                        .expect("Not a valid UTF-8 sequence");
+                    let qual = std::str::from_utf8(output_record.qual())
+                        .expect("Not a valid UTF-8 sequence");
+                    let record_str = format!("@{}\n{}\n+\n{}\n", id, seq, qual);
+                    write!(writer, "{}", record_str).unwrap();
                 }
             }
-        }) {
-            self.thread_handles.push(handle);
-        } else {
-            info!("Cannot create controlled writing thread");
-        }
+            
+            // Flush buffer
+            writer.flush().expect("Failed to flush writer buffer");
+            
+            // Finish gzip encoder
+            let encoder = writer.into_inner().expect("Failed to get inner encoder");
+            encoder.finish().expect("Failed to finish gzip encoding");
+        });
+        
+        self.thread_handles.push(handle);
     }
 
     /// Write log file
@@ -134,36 +116,18 @@ impl FileWriterManager {
     }
     
     /// Complete writing and wait for all threads to finish
-    pub fn finalize(&mut self) {
+    pub fn drop(&mut self) {
         info!("Writing FASTQ files, this may take some time...");
         
-        // Clear writers, this will cause receivers to disconnect
+        // Drop all senders to close channels
         self.writers.clear();
         
-        // Wait for all write threads to complete
+        // Wait for all writing threads to complete
         for handle in self.thread_handles.drain(..) {
             handle.join().expect("Writing thread panicked");
         }
-    }
-    
-    /// Clean up memory by clearing completed writers - optimized for performance
-    pub fn cleanup_memory(&mut self) {
-        // Only clean up completed thread handles if we have many
-        if self.thread_handles.len() > 100 {
-            self.thread_handles.retain(|handle| !handle.is_finished());
-        }
         
-        // Only shrink if capacity is significantly larger than current size
-        if self.thread_handles.capacity() > self.thread_handles.len() * 3 && 
-           self.thread_handles.capacity() > 500 {
-            self.thread_handles.shrink_to_fit();
-        }
-        
-        // Clear logger only if it gets very large
-        if self.logger.len() > 500000 {
-            debug!("Clearing logger to free memory (size: {})", self.logger.len());
-            self.logger.clear();
-        }
+        info!("All writing threads completed successfully");
     }
     
 }

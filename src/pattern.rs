@@ -22,6 +22,7 @@ pub struct PatternConfiguration {
     pub id_separator: String,
     pub fusion_database: FusionDatabase,
     pub fusion_error_rate: f32,
+    pub write_all: bool,
 }
 
 impl PatternConfiguration {
@@ -40,6 +41,7 @@ impl PatternConfiguration {
             id_separator: args.id_separator.clone(),
             fusion_database: FusionDatabase::new(),
             fusion_error_rate: args.fusion_error_rate,
+            write_all: args.write_all,
         };
         config.normalize_vectors();
         config

@@ -156,7 +156,7 @@ impl PatternConfiguration {
     pub fn new_from_view_args(view_args: &Commands) -> PatternConfiguration {
         let (window_size, pattern_match_types, trim_mode, pattern_error_rates, 
              max_distances, position_shifts, min_length, id_separator, 
-             pattern_db_file, pattern_files, use_position_info) = match view_args {
+             pattern_db_file, pattern_files, use_position_info, write_all) = match view_args {
             Commands::View { 
                 window_size, 
                 pattern_match_type, 
@@ -169,6 +169,7 @@ impl PatternConfiguration {
                 pattern_db_file, 
                 pattern_files, 
                 use_position_info, 
+                write_all,
                 .. 
             } => (
                 window_size.clone(), 
@@ -181,7 +182,8 @@ impl PatternConfiguration {
                 id_separator.clone(), 
                 pattern_db_file.clone(), 
                 pattern_files.clone(), 
-                *use_position_info
+                *use_position_info,
+                *write_all
             ),
             _ => return PatternConfiguration {
                 window_size: vec![400, 400],
@@ -196,6 +198,7 @@ impl PatternConfiguration {
                 id_separator: "%".to_string(),
                 fusion_database: crate::pattern::FusionDatabase::new(),
                 fusion_error_rate: 0.2,
+                write_all: false,
             },
         };
         
@@ -212,6 +215,7 @@ impl PatternConfiguration {
             id_separator,
             fusion_database: crate::pattern::FusionDatabase::new(),
             fusion_error_rate: 0.2,
+            write_all,
         };
         
         pattern_config.normalize_vectors();

@@ -105,6 +105,8 @@ pub struct ReadInfoStats {
 pub struct ReadInfo {
     /// Original FASTQ record ID (only store ID, not full record)
     pub record_id: String,
+    /// Original FASTQ record ID before any modifications (preserved for output)
+    pub original_record_id: String,
     /// Sequence data (only store when needed)
     pub sequence: Option<Vec<u8>>,
     /// Quality data (only store when needed)
@@ -135,8 +137,10 @@ impl ReadInfo {
     /// Create new sequence information - memory optimized
     pub fn new(record: Record) -> Self {
         let sequence_length = record.seq().len();
+        let record_id = record.id().to_string();
         Self {
-            record_id: record.id().to_string(),
+            record_id: record_id.clone(),
+            original_record_id: record_id,
             sequence: Some(record.seq().to_vec()),
             quality: Some(record.qual().to_vec()),
             split_types: Vec::new(),
@@ -159,19 +163,16 @@ impl ReadInfo {
         write_type: &str, 
         trim_mode: usize, 
         min_length: usize, 
-        id_separator: &str
+        id_separator: &str,
+        write_all: bool
     ) {
         self.update_match_names(pattern_match_types);
-        self.update_output_filename(write_type, id_separator);
+        self.update_output_filename(write_type);
         self.update_sequence_type(min_length, trim_mode);
         self.update_sequence_window();
-        self.update_write_decision(trim_mode, id_separator);
+        self.update_write_decision(trim_mode, id_separator, write_all);
         
-        // Clear sequence and quality data if not needed for output
-        if !self.should_write_to_fastq {
-            self.sequence = None;
-            self.quality = None;
-        }
+        // Do not clear sequence/quality here; fusion detection may need it post-update
     }
     
     /// Clear large data to free memory - new method for memory optimization
@@ -190,7 +191,7 @@ impl ReadInfo {
     /// Create lightweight copy for statistics - memory optimized
     pub fn create_stats_copy(&self) -> ReadInfoStats {
         ReadInfoStats {
-            record_id: self.record_id.clone(),
+            record_id: self.original_record_id.clone(),
             sequence_type: self.sequence_type.clone(),
             sequence_length: self.sequence_length,
             match_types: self.match_types.clone(),
@@ -202,20 +203,28 @@ impl ReadInfo {
     /// Update match names
     fn update_match_names(&mut self, pattern_match_types: &[String]) {
         let mut strand_values = Vec::new();
+        let mut has_valid_match = false;
         
         for (index, split_type) in self.split_types.iter().enumerate() {
             match pattern_match_types.get(index) {
                 Some(match_type) if match_type >= &String::from(split_type.pattern_match) => {
                     self.match_types.push(split_type.pattern_type.clone());
                     self.match_names.push(split_type.pattern_name.clone());
+                    has_valid_match = true;
                 }
                 _ => {
                     self.match_types.push(String::from("unknown"));
                     self.match_names.push(String::from("unknown"));
-                    self.sequence_type = "unknown".to_string();
                 }
             }
             strand_values.push(split_type.pattern_strand.clone());
+        }
+        
+        // Set sequence type based on whether we have valid matches
+        if has_valid_match {
+            self.sequence_type = "valid".to_string();
+        } else {
+            self.sequence_type = "unknown".to_string();
         }
         
         // Ensure at least 3 elements
@@ -234,17 +243,15 @@ impl ReadInfo {
     }
     
     /// Update output filename
-    fn update_output_filename(&mut self, write_type: &str, id_separator: &str) {
+    fn update_output_filename(&mut self, write_type: &str) {
         if write_type == "type" {
             let mut reversed_types = self.match_types.clone();
             reversed_types.reverse();
             self.output_filename = reversed_types.join("/");
-            self.record_id = self.match_types.join(id_separator);
         } else {
             let mut reversed_names = self.match_names.clone();
             reversed_names.reverse();
             self.output_filename = reversed_names.join("/");
-            self.record_id = self.match_names.join(id_separator);
         }
     }
     
@@ -299,20 +306,40 @@ impl ReadInfo {
     }
     
     /// Update write decision - memory optimized
-    fn update_write_decision(&mut self, trim_mode: usize, id_separator: &str) {
-        if self.sequence_type == "valid" {
+    fn update_write_decision(&mut self, trim_mode: usize, id_separator: &str, write_all: bool) {
+        // Check if match_types contains any "unknown"
+        let has_unknown = self.match_types.contains(&String::from("unknown"));
+        
+        // Determine if this read should be written
+        let should_write = if write_all {
+            // If write_all is true, write all reads except filtered ones
+            self.sequence_type != "filtered"
+        } else {
+            // Default behavior: don't write if match_types contains unknown
+            !has_unknown && self.sequence_type == "valid"
+        };
+        
+        if should_write {
             self.should_write_to_fastq = true;
             let (cut_left, cut_right) = self.calculate_trim_positions(trim_mode);
             let final_cut_right = if cut_right == 0 { self.sequence_length } else { cut_right };
             
             // Store trim positions instead of creating full record
             self.trim_positions = (cut_left, final_cut_right);
+            
+            // Append split information to original record_id
+            let split_info = if !self.match_names.is_empty() {
+                self.match_names.join(id_separator)
+            } else {
+                String::new()
+            };
+            
             self.record_id = format!("{}{}{}{}{}", 
-                self.record_id, 
+                self.original_record_id, 
                 id_separator, 
                 self.strand_orientation, 
                 id_separator, 
-                self.record_id
+                split_info
             );
         }
     }
@@ -342,7 +369,7 @@ impl ReadInfo {
     pub fn to_tsv(&self) -> String {
         let mut tsv_line = format!(
             "{}\t{}\t{}", 
-            self.record_id, 
+            self.original_record_id, 
             self.sequence_length, 
             self.sequence_type
         );

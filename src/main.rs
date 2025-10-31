@@ -81,20 +81,15 @@ fn execute_main_processing(args: &args::Args) {
         read_receiver, 
         &search_patterns, 
         thread_monitor.get_processing_threads(),
-        thread_monitor.get_thread_pool()
+        &mut thread_monitor.thread_pool
     );
     
-    // Initialize statistics and write manager with controlled thread count
+    // Initialize statistics and write manager
     let mut statistics_manager = counter::StatisticsManager::new(args.outdir.clone());
-    let mut file_writer_manager = writer::FileWriterManager::new_controlled(
-        args.outdir.clone(),
-        thread_monitor.get_writing_threads(),
-        thread_monitor.get_thread_pool()
-    );
+    let mut file_writer_manager = writer::FileWriterManager::new(args.outdir.clone());
     let mut progress_tracker = ProcessInfo::new(args.log_interval);
     
-    // Process each sequence - memory optimized
-    let mut processed_count = 0;
+    // Process each sequence
     for read_info in split_receiver {
         // Create lightweight stats copy for statistics
         let read_stats = read_info.create_stats_copy();
@@ -105,19 +100,12 @@ fn execute_main_processing(args: &args::Args) {
         // Update statistics using lightweight structure
         statistics_manager.process_read_stats(&read_stats);
         
-        // Write file with controlled thread management
-        file_writer_manager.write_controlled(read_info, thread_monitor.get_thread_pool())
+        // Write file
+        file_writer_manager.write(read_info)
             .expect("Failed to write sequence information");
         
         // Update progress
         progress_tracker.info();
-        
-        // Periodic memory cleanup - unified frequency for better performance
-        processed_count += 1;
-        if processed_count % 500000 == 0 {
-            file_writer_manager.cleanup_memory();
-            statistics_manager.cleanup_memory();
-        }
     }
     
     // Complete processing
@@ -151,7 +139,7 @@ fn finalize_processing(
     info!("Sequence splitting completed! Processing time: {:.4?}", processing_time);
     
     // Wait for all write threads to complete
-    file_writer_manager.finalize();
+    file_writer_manager.drop();
     
     let total_time = start_time.elapsed();
     info!("All processing completed! Total time: {:.4?}", total_time);

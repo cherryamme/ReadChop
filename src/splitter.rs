@@ -316,31 +316,32 @@ pub fn perform_sequence_splitting_vector(
 /// Detect fusion sequence - memory optimized
 fn detect_fusion_sequence(read_info: &ReadInfo, pattern_config: &PatternConfiguration) -> bool {
     let (middle_start, middle_end) = read_info.sequence_window;
-    
+
+    // Invalid window
     if middle_end <= middle_start {
         return false;
     }
-    
-    let fusion_database = &pattern_config.fusion_database.fusion_patterns;
-    let sequence = read_info.sequence.as_ref()
-        .expect("Sequence data not available");
-    let mut search_pattern = SearchPattern::new(
-        sequence.to_vec(), 
-        pattern_config.fusion_error_rate
-    );
 
-    // Search patterns in middle section
+    let fusion_db = &pattern_config.fusion_database.fusion_patterns;
+    let Some(sequence) = read_info.sequence.as_ref() else {
+        return false;
+    };
+    let mut search_pattern = SearchPattern::new(sequence.to_vec(), pattern_config.fusion_error_rate);
+
+    // Search for the pattern in the middle part
     let middle_matcher = find_matcher(
         middle_start,
         middle_end,
-        fusion_database,
+        fusion_db,
         &mut search_pattern,
         false,
         0,
         "middle",
     );
 
-    middle_matcher.status
+    // If a pattern is found in the middle part, return true; otherwise false
+    if middle_matcher.status { return true; }
+    false
 }
 
 
@@ -376,14 +377,20 @@ pub fn create_splitter_receiver_controlled(
                     pattern_config.trim_mode,
                     pattern_config.min_length,
                     &pattern_config.id_separator,
+                    pattern_config.write_all,
                 );
                 
-                // Detect fusion sequence
-                if !pattern_config.fusion_database.is_empty() 
-                    && detect_fusion_sequence(&read_info, &pattern_config) 
+                // After update, run fusion detection using the computed middle window
+                if !pattern_config.fusion_database.is_empty()
+                    && detect_fusion_sequence(&read_info, &pattern_config)
                 {
                     read_info.sequence_type = "fusion".into();
                     read_info.should_write_to_fastq = false;
+                }
+
+                // Now free large data if we are not writing this read
+                if !read_info.should_write_to_fastq {
+                    read_info.clear_large_data();
                 }
                 
                 sender.send(read_info).expect("Failed to send sequence information");

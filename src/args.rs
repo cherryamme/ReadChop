@@ -99,6 +99,10 @@ pub struct Args {
     /// Record ID separator
     #[arg(long = "id_sep", default_value = "%")]
     pub id_separator: String,
+    
+    /// Write all reads including unknown sequences
+    #[arg(long = "write_all")]
+    pub write_all: bool,
 }
 
 /// Subcommand enumeration
@@ -150,6 +154,9 @@ pub enum Commands {
         /// Record ID separator
         #[arg(long = "id_sep", default_value = "%")]
         id_separator: String,
+        /// Write all reads including unknown sequences
+        #[arg(long = "write_all")]
+        write_all: bool,
     },
 }
 

@@ -112,7 +112,7 @@ impl ThreadAllocationStrategy {
 
 /// Thread usage monitor
 pub struct ThreadMonitor {
-    thread_pool: ThreadPoolManager,
+    pub thread_pool: ThreadPoolManager,
     _allocation_strategy: ThreadAllocationStrategy,
     processing_threads: usize,
     writing_threads: usize,
