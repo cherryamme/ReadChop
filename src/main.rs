@@ -104,8 +104,8 @@ async fn execute_main_processing(args: &args::Args) {
         // Update statistics using lightweight structure
         statistics_manager.process_read_stats(&read_stats);
         
-        // Write file (non-blocking)
-        file_writer_manager.write(read_info)
+        // Write file (blocking if channel is full to control memory usage)
+        file_writer_manager.write(read_info).await
             .expect("Failed to write sequence information");
         
         // Update progress

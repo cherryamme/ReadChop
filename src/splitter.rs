@@ -345,14 +345,17 @@ fn detect_fusion_sequence(read_info: &ReadInfo, pattern_config: &PatternConfigur
 }
 
 
-/// Create controlled splitter receiver with thread pool management
+/// Channel capacity for splitter (controls memory usage by limiting buffer size)
+const CHANNEL_CAPACITY: usize = 5000;
+
+/// Create controlled splitter receiver with thread pool management (blocking if channel is full to control memory usage)
 pub fn create_splitter_receiver_controlled(
     read_receiver: Receiver<ReadInfo>,
     pattern_config: &PatternConfiguration,
     thread_count: usize,
     thread_pool: &mut ThreadPoolManager,
 ) -> Receiver<ReadInfo> {
-    let (sender, receiver) = flume::unbounded();
+    let (sender, receiver) = flume::bounded(CHANNEL_CAPACITY);
     
     // Allocate thread resources
     let allocated_threads = thread_pool.allocate_threads(thread_count);

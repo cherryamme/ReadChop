@@ -11,7 +11,10 @@ use tokio::fs::create_dir_all;
 use crate::fastq::ReadInfo;
 use tokio::io::BufWriter;
 use tokio::task::JoinHandle;
-use flume::{Receiver, Sender, unbounded};
+use flume::{Receiver, Sender, bounded};
+
+/// Channel capacity for writer (controls memory usage by limiting buffer size)
+const CHANNEL_CAPACITY: usize = 5000;
 
 /// File write manager
 pub struct FileWriterManager {
@@ -41,8 +44,8 @@ impl FileWriterManager {
         }
     }
 
-    /// Write sequence information (non-blocking)
-    pub fn write(&mut self, read_info: ReadInfo) -> Result<()> {
+    /// Write sequence information (blocking if channel is full to control memory usage)
+    pub async fn write(&mut self, read_info: ReadInfo) -> Result<()> {
         if !read_info.should_write_to_fastq {
             return Ok(());
         }
@@ -50,7 +53,7 @@ impl FileWriterManager {
         let output_filename = read_info.output_filename.clone();
         
         if !self.writers.contains_key(&output_filename) {
-            let (tx, rx) = unbounded();
+            let (tx, rx) = bounded(CHANNEL_CAPACITY);
             let file_path = Path::new(&self.output_directory)
                 .join(format!("{}.fq.gz", output_filename));
             
@@ -60,7 +63,7 @@ impl FileWriterManager {
         }
         
         self.writers.get(&output_filename).unwrap()
-            .send(read_info)
+            .send_async(read_info).await
             .expect("Failed to send read info to writer");
         
         Ok(())

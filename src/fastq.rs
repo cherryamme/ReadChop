@@ -1,7 +1,7 @@
 use crate::splitter::SplitType;
 use bio::io::fastq::{Reader, Record};
 use flate2::read::MultiGzDecoder;
-use flume::{unbounded, Sender, Receiver};
+use flume::{bounded, Sender, Receiver};
 use log::info;
 use std::ffi::OsStr;
 use std::{
@@ -15,6 +15,9 @@ use std::collections::HashSet;
 /// Buffer size constant for I/O performance optimization - memory optimized
 const BUFFER_SIZE: usize = 2 * 1024 * 1024; // Reduced from 10MB to 2MB
 
+/// Channel capacity for reader (controls memory usage by limiting buffer size)
+const CHANNEL_CAPACITY: usize = 5000;
+
 /// Check if file is gzip compressed format
 fn is_gzip_file(path: &PathBuf) -> bool {
     match path.extension().and_then(OsStr::to_str) {
@@ -23,9 +26,9 @@ fn is_gzip_file(path: &PathBuf) -> bool {
     }
 }
 
-/// Create FASTQ reader, return receiver
+/// Create FASTQ reader, return receiver (blocking if channel is full to control memory usage)
 pub fn create_reader(files: Vec<String>) -> Receiver<ReadInfo> {
-    let (sender, receiver) = unbounded();
+    let (sender, receiver) = bounded(CHANNEL_CAPACITY);
     
     std::thread::spawn(move || {
         let start_time = Instant::now();
