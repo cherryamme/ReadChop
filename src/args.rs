@@ -103,6 +103,10 @@ pub struct Args {
     /// Write all reads including unknown sequences
     #[arg(long = "write_all")]
     pub write_all: bool,
+    
+    /// Enable logger to write reads_log.gz file
+    #[arg(long = "enable_logger")]
+    pub enable_logger: bool,
 }
 
 /// Subcommand enumeration

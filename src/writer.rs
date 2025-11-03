@@ -24,6 +24,8 @@ pub struct FileWriterManager {
     output_directory: String,
     /// Logger
     pub logger: Vec<String>,
+    /// Whether logger is enabled
+    enable_logger: bool,
     /// Task handles
     task_handles: Vec<JoinHandle<()>>,
     /// Semaphore to limit concurrent writing tasks (max 4)
@@ -33,14 +35,22 @@ pub struct FileWriterManager {
 impl FileWriterManager {
 
     /// Create file write manager
-    pub fn new(output_directory: String, writer_threads: usize) -> Self {
+    pub fn new(output_directory: String, writer_threads: usize, enable_logger: bool) -> Self {
         info!("Creating writer manager with {} concurrent write tasks limit...", writer_threads);
         Self {
             writers: HashMap::new(),
             output_directory,
             logger: Vec::new(),
+            enable_logger,
             task_handles: Vec::new(),
             write_semaphore: Arc::new(Semaphore::new(writer_threads)),
+        }
+    }
+    
+    /// Log record (only if logger is enabled)
+    pub fn log(&mut self, log_line: String) {
+        if self.enable_logger {
+            self.logger.push(log_line);
         }
     }
 
@@ -95,7 +105,7 @@ impl FileWriterManager {
             const BATCH_SIZE: usize = 1000; // Process in batches of 1000 records
             
             // Process each read_info immediately as it arrives
-            for read_info in rx.iter() {
+            for mut read_info in rx.iter() {
                 if let Some(output_record) = read_info.get_output_record() {
                     let id = output_record.id();
                     let seq = std::str::from_utf8(output_record.seq())
@@ -107,6 +117,9 @@ impl FileWriterManager {
                     writer.write_all(record_str.as_bytes()).await.unwrap();
                     batch_count += 1;
                     
+                    // Clear large data immediately after writing to free memory
+                    read_info.clear_large_data();
+                    
                     // Periodically flush and yield control to limit CPU usage
                     if batch_count >= BATCH_SIZE {
                         let _permit = semaphore.acquire().await.expect("Semaphore closed");
@@ -114,6 +127,9 @@ impl FileWriterManager {
                         drop(_permit); // Release permit immediately after flush
                         batch_count = 0;
                     }
+                } else {
+                    // Even if not writing, clear large data if present
+                    read_info.clear_large_data();
                 }
             }
             
@@ -129,8 +145,12 @@ impl FileWriterManager {
         self.task_handles.push(handle);
     }
 
-    /// Write log file
+    /// Write log file (only if logger is enabled)
     pub async fn write_log_file(&self, output_directory: &str) -> Result<()> {
+        if !self.enable_logger {
+            return Ok(());
+        }
+        
         let directory_path = Path::new(output_directory);
         create_dir_all(&directory_path).await?;
         

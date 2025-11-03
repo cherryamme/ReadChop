@@ -89,7 +89,8 @@ async fn execute_main_processing(args: &args::Args) {
     let mut statistics_manager = counter::StatisticsManager::new(args.outdir.clone());
     let mut file_writer_manager = writer::FileWriterManager::new(
         args.outdir.clone(), 
-        thread_monitor.get_writing_threads()
+        thread_monitor.get_writing_threads(),
+        args.enable_logger
     );
     let mut progress_tracker = ProcessInfo::new(args.log_interval);
     
@@ -98,8 +99,8 @@ async fn execute_main_processing(args: &args::Args) {
         // Create lightweight stats copy for statistics
         let read_stats = read_info.create_stats_copy();
         
-        // Log record
-        file_writer_manager.logger.push(read_info.to_tsv());
+        // Log record (only if logger is enabled)
+        file_writer_manager.log(read_info.to_tsv());
         
         // Update statistics using lightweight structure
         statistics_manager.process_read_stats(&read_stats);
