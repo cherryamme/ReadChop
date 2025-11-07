@@ -107,7 +107,7 @@ async fn execute_main_processing(args: &args::Args) {
         statistics_manager.process_read_stats(&read_stats);
         
         // Write file (blocking if channel is full to control memory usage)
-        file_writer_manager.write(read_info).await
+        file_writer_manager.write(read_info)
             .expect("Failed to write sequence information");
         
         // Update progress
@@ -136,7 +136,7 @@ async fn finalize_processing(
     output_dir: &str,
 ) {
     // Write log file
-    file_writer_manager.write_log_file(output_dir).await
+    file_writer_manager.write_log_file(output_dir)
         .expect("Failed to write log file");
     
     // Write statistics
@@ -150,7 +150,7 @@ async fn finalize_processing(
     info!("Sequence splitting completed! Processing time: {:.4?}", processing_time);
     
     // Wait for all write tasks to complete
-    file_writer_manager.finish().await;
+    file_writer_manager.finish();
     
     let total_time = start_time.elapsed();
     info!("All processing completed! Total time: {:.4?}", total_time);
