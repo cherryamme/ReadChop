@@ -154,9 +154,9 @@ impl ThreadMonitor {
     /// Print thread usage statistics
     pub fn print_thread_stats(&self) {
         let (max, active, available) = self.thread_pool.get_thread_stats();
-        info!(
-            "Thread usage statistics: max={}, active={}, available={}, processing_threads={}, writing_threads={}",
-            max, active, available, self.processing_threads, self.writing_threads
-        );
+        // info!(
+        //     "Thread usage statistics: max={}, active={}, available={}, processing_threads={}, writing_threads={}",
+        //     max, active, available, self.processing_threads, self.writing_threads
+        // );
     }
 }

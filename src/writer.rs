@@ -13,11 +13,8 @@ use flate2::Compression;
 /// When channel is full, send will block, providing backpressure
 const CHANNEL_CAPACITY: usize = 1_000;
 
-/// Batch size for periodic flushing
-const BATCH_SIZE: usize = 1000;
-
 /// Buffer size for output (8MB)
-const BUFFER_SIZE: usize = 4 * 1024 * 1024;
+const BUFFER_SIZE: usize = 10 * 1024;
 
 /// File write manager with tag-based sharding
 pub struct FileWriterManager {
@@ -89,6 +86,13 @@ impl FileWriterManager {
                 }
             }
             
+            fn write_fmt(&mut self, fmt: std::fmt::Arguments<'_>) -> std::io::Result<()> {
+                match self {
+                    Writer::Compressed(w) => w.write_fmt(fmt),
+                    Writer::Uncompressed(w) => w.write_fmt(fmt),
+                }
+            }
+            
             fn flush(&mut self) -> std::io::Result<()> {
                 match self {
                     Writer::Compressed(w) => w.flush(),
@@ -115,8 +119,13 @@ impl FileWriterManager {
             let is_new_writer = !writers.contains_key(&tag);
             if is_new_writer {
                 let file_extension = if compress { ".fq.gz" } else { ".fq" };
-                let file_path = Path::new(&output_directory)
-                    .join(format!("{}{}", tag, file_extension));
+                // 使用 PathBuf 构建路径，避免 format!() 分配
+                let mut file_path = std::path::PathBuf::from(&output_directory);
+                // 使用 push 配合字符串拼接，避免 format!() 分配
+                let mut filename = String::with_capacity(tag.len() + file_extension.len());
+                filename.push_str(&tag);
+                filename.push_str(file_extension);
+                file_path.push(&filename);
                 
                 // Create directory
                 if let Some(parent) = file_path.parent() {
@@ -138,7 +147,6 @@ impl FileWriterManager {
                 
                 writers.insert(tag.clone(), writer);
                 batch_counters.insert(tag.clone(), 0);
-                info!("Thread {}: Created new writer for tag: {}", thread_id, tag);
             }
             
             // Write the record
@@ -148,10 +156,10 @@ impl FileWriterManager {
                     .expect("Not a valid UTF-8 sequence");
                 let qual = std::str::from_utf8(output_record.qual())
                     .expect("Not a valid UTF-8 sequence");
-                let record_str = format!("@{}\n{}\n+\n{}\n", id, seq, qual);
                 
                 let writer = writers.get_mut(&tag).unwrap();
-                writer.write_all(record_str.as_bytes())
+                // 使用 write!() 宏直接写入，避免 format!() 分配新 String
+                write!(writer, "@{}\n{}\n+\n{}\n", id, seq, qual)
                     .expect("Failed to write record");
                 
                 // Update batch counter
@@ -182,8 +190,6 @@ impl FileWriterManager {
                 },
             }
         }
-        
-        info!("Writer thread {} completed", thread_id);
     }
     
     /// Log record (only if logger is enabled)
@@ -261,7 +267,7 @@ impl FileWriterManager {
             handle.join().expect("Writing thread panicked");
         }
         
-        info!("All writing tasks completed successfully");
+        info!("All {} writer threads completed successfully", self.num_threads);
     }
 }
 

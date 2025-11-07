@@ -13,7 +13,7 @@ use std::time::Instant;
 use std::collections::HashSet;
 
 /// Buffer size constant for I/O performance optimization - memory optimized
-const BUFFER_SIZE: usize = 2 * 1024 * 1024; // Reduced from 10MB to 2MB
+const BUFFER_SIZE: usize = 10 * 1024; // Reduced from 10MB to 2MB
 
 /// Channel capacity for reader (controls memory usage by limiting buffer size)
 const CHANNEL_CAPACITY: usize = 5000;
@@ -337,13 +337,19 @@ impl ReadInfo {
                 String::new()
             };
             
-            self.record_id = format!("{}{}{}{}{}", 
-                self.original_record_id, 
-                id_separator, 
-                self.strand_orientation, 
-                id_separator, 
-                split_info
+            // 使用 String::with_capacity 和 push_str 避免 format!() 分配
+            let mut record_id = String::with_capacity(
+                self.original_record_id.len() + 
+                self.strand_orientation.len() + 
+                split_info.len() + 
+                id_separator.len() * 2
             );
+            record_id.push_str(&self.original_record_id);
+            record_id.push_str(id_separator);
+            record_id.push_str(&self.strand_orientation);
+            record_id.push_str(id_separator);
+            record_id.push_str(&split_info);
+            self.record_id = record_id;
         }
     }
     
@@ -370,15 +376,24 @@ impl ReadInfo {
     
     /// Convert to TSV format string
     pub fn to_tsv(&self) -> String {
-        let mut tsv_line = format!(
-            "{}\t{}\t{}", 
-            self.original_record_id, 
-            self.sequence_length, 
-            self.sequence_type
+        // 使用 String::with_capacity 预分配容量，避免多次重新分配
+        let mut tsv_line = String::with_capacity(
+            self.original_record_id.len() + 
+            self.sequence_type.len() + 
+            20 + // 预估数字长度
+            self.split_types.len() * 50 // 预估每个 split_type 的长度
         );
         
+        // 使用 push_str 和 to_string 避免 format!() 分配
+        tsv_line.push_str(&self.original_record_id);
+        tsv_line.push('\t');
+        tsv_line.push_str(&self.sequence_length.to_string());
+        tsv_line.push('\t');
+        tsv_line.push_str(&self.sequence_type);
+        
         for split_type in &self.split_types {
-            tsv_line.push_str(&format!("\t{}", split_type.to_info()));
+            tsv_line.push('\t');
+            tsv_line.push_str(&split_type.to_info());
         }
         
         tsv_line
