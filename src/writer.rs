@@ -26,6 +26,8 @@ pub struct FileWriterManager {
     pub logger: Vec<String>,
     /// Whether logger is enabled
     enable_logger: bool,
+    /// Whether to compress output files
+    compress: bool,
     /// Task handles
     task_handles: Vec<JoinHandle<()>>,
     /// Semaphore to limit concurrent writing tasks (max 4)
@@ -35,13 +37,15 @@ pub struct FileWriterManager {
 impl FileWriterManager {
 
     /// Create file write manager
-    pub fn new(output_directory: String, writer_threads: usize, enable_logger: bool) -> Self {
-        info!("Creating writer manager with {} concurrent write tasks limit...", writer_threads);
+    pub fn new(output_directory: String, writer_threads: usize, enable_logger: bool, compress: bool) -> Self {
+        let compression_status = if compress { "enabled (gz)" } else { "disabled (fastq)" };
+        info!("Creating writer manager with {} concurrent write tasks limit, compression: {}...", writer_threads, compression_status);
         Self {
             writers: HashMap::new(),
             output_directory,
             logger: Vec::new(),
             enable_logger,
+            compress,
             task_handles: Vec::new(),
             write_semaphore: Arc::new(Semaphore::new(writer_threads)),
         }
@@ -64,11 +68,12 @@ impl FileWriterManager {
         
         if !self.writers.contains_key(&output_filename) {
             let (tx, rx) = bounded(CHANNEL_CAPACITY);
+            let file_extension = if self.compress { ".fq.gz" } else { ".fq" };
             let file_path = Path::new(&self.output_directory)
-                .join(format!("{}.fq.gz", output_filename));
+                .join(format!("{}{}", output_filename, file_extension));
             
             // Start writing task that will create file and handle all I/O
-            self.start_writing_task(file_path, rx);
+            self.start_writing_task(file_path, rx, self.compress);
             self.writers.insert(output_filename.clone(), tx);
         }
         
@@ -87,7 +92,7 @@ impl FileWriterManager {
         self.write_semaphore.add_permits(additional_threads);
     }
 
-    fn start_writing_task(&mut self, file_path: std::path::PathBuf, rx: Receiver<ReadInfo>) {
+    fn start_writing_task(&mut self, file_path: std::path::PathBuf, rx: Receiver<ReadInfo>, compress: bool) {
         let semaphore = Arc::clone(&self.write_semaphore);
         let handle = tokio::spawn(async move {
             // Create directory and file asynchronously in the task
@@ -98,48 +103,87 @@ impl FileWriterManager {
             let file = File::create(&file_path).await
                 .expect("Failed to create output file");
             
-            let encoder = GzipEncoder::new(file);
-            let mut writer = BufWriter::with_capacity(40_000_000, encoder);
-            
             let mut batch_count = 0;
             const BATCH_SIZE: usize = 1000; // Process in batches of 1000 records
             
-            // Process each read_info immediately as it arrives
-            for mut read_info in rx.iter() {
-                if let Some(output_record) = read_info.get_output_record() {
-                    let id = output_record.id();
-                    let seq = std::str::from_utf8(output_record.seq())
-                        .expect("Not a valid UTF-8 sequence");
-                    let qual = std::str::from_utf8(output_record.qual())
-                        .expect("Not a valid UTF-8 sequence");
-                    let record_str = format!("@{}\n{}\n+\n{}\n", id, seq, qual);
-                    
-                    writer.write_all(record_str.as_bytes()).await.unwrap();
-                    batch_count += 1;
-                    
-                    // Clear large data immediately after writing to free memory
-                    read_info.clear_large_data();
-                    
-                    // Periodically flush and yield control to limit CPU usage
-                    if batch_count >= BATCH_SIZE {
-                        let _permit = semaphore.acquire().await.expect("Semaphore closed");
-                        writer.flush().await.expect("Failed to flush writer buffer");
-                        drop(_permit); // Release permit immediately after flush
-                        batch_count = 0;
+            if compress {
+                // Compressed output path
+                let encoder = GzipEncoder::new(file);
+                let mut writer = BufWriter::with_capacity(40_000_000, encoder);
+                
+                // Process each read_info immediately as it arrives
+                for mut read_info in rx.iter() {
+                    if let Some(output_record) = read_info.get_output_record() {
+                        let id = output_record.id();
+                        let seq = std::str::from_utf8(output_record.seq())
+                            .expect("Not a valid UTF-8 sequence");
+                        let qual = std::str::from_utf8(output_record.qual())
+                            .expect("Not a valid UTF-8 sequence");
+                        let record_str = format!("@{}\n{}\n+\n{}\n", id, seq, qual);
+                        
+                        writer.write_all(record_str.as_bytes()).await.unwrap();
+                        batch_count += 1;
+                        
+                        // Clear large data immediately after writing to free memory
+                        read_info.clear_large_data();
+                        
+                        // Periodically flush and yield control to limit CPU usage
+                        if batch_count >= BATCH_SIZE {
+                            let _permit = semaphore.acquire().await.expect("Semaphore closed");
+                            writer.flush().await.expect("Failed to flush writer buffer");
+                            drop(_permit); // Release permit immediately after flush
+                            batch_count = 0;
+                        }
+                    } else {
+                        // Even if not writing, clear large data if present
+                        read_info.clear_large_data();
                     }
-                } else {
-                    // Even if not writing, clear large data if present
-                    read_info.clear_large_data();
                 }
+                
+                // Final flush
+                let _permit = semaphore.acquire().await.expect("Semaphore closed");
+                writer.flush().await.expect("Failed to flush writer buffer");
+                
+                // Finish gzip encoder
+                let mut encoder = writer.into_inner();
+                encoder.shutdown().await.expect("Failed to finish gzip encoding");
+            } else {
+                // Uncompressed output path
+                let mut writer = BufWriter::with_capacity(40_000, file);
+                
+                // Process each read_info immediately as it arrives
+                for mut read_info in rx.iter() {
+                    if let Some(output_record) = read_info.get_output_record() {
+                        let id = output_record.id();
+                        let seq = std::str::from_utf8(output_record.seq())
+                            .expect("Not a valid UTF-8 sequence");
+                        let qual = std::str::from_utf8(output_record.qual())
+                            .expect("Not a valid UTF-8 sequence");
+                        let record_str = format!("@{}\n{}\n+\n{}\n", id, seq, qual);
+                        
+                        writer.write_all(record_str.as_bytes()).await.unwrap();
+                        batch_count += 1;
+                        
+                        // Clear large data immediately after writing to free memory
+                        read_info.clear_large_data();
+                        
+                        // Periodically flush and yield control to limit CPU usage
+                        if batch_count >= BATCH_SIZE {
+                            let _permit = semaphore.acquire().await.expect("Semaphore closed");
+                            writer.flush().await.expect("Failed to flush writer buffer");
+                            drop(_permit); // Release permit immediately after flush
+                            batch_count = 0;
+                        }
+                    } else {
+                        // Even if not writing, clear large data if present
+                        read_info.clear_large_data();
+                    }
+                }
+                
+                // Final flush
+                let _permit = semaphore.acquire().await.expect("Semaphore closed");
+                writer.flush().await.expect("Failed to flush writer buffer");
             }
-            
-            // Final flush
-            let _permit = semaphore.acquire().await.expect("Semaphore closed");
-            writer.flush().await.expect("Failed to flush writer buffer");
-            
-            // Finish gzip encoder
-            let mut encoder = writer.into_inner();
-            encoder.shutdown().await.expect("Failed to finish gzip encoding");
         });
         
         self.task_handles.push(handle);

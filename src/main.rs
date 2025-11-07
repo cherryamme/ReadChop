@@ -67,7 +67,7 @@ async fn execute_main_processing(args: &args::Args) {
     
     // Create thread monitor with balanced allocation strategy
     let thread_strategy = ThreadAllocationStrategy::Balanced { 
-        processing_ratio: 0.8  // 80% for processing, 20% for writing
+        processing_ratio: 0.6  // 80% for processing, 20% for writing
     };
     let mut thread_monitor = ThreadMonitor::new(args.threads, thread_strategy);
     
@@ -90,7 +90,8 @@ async fn execute_main_processing(args: &args::Args) {
     let mut file_writer_manager = writer::FileWriterManager::new(
         args.outdir.clone(), 
         thread_monitor.get_writing_threads(),
-        args.enable_logger
+        args.enable_logger,
+        args.compress
     );
     let mut progress_tracker = ProcessInfo::new(args.log_interval);
     

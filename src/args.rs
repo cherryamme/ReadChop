@@ -107,6 +107,10 @@ pub struct Args {
     /// Enable logger to write reads_log.gz file
     #[arg(long = "enable_logger")]
     pub enable_logger: bool,
+    
+    /// Enable gzip compression for output files (default: false, outputs plain fastq files)
+    #[arg(long = "compress")]
+    pub compress: bool,
 }
 
 /// Subcommand enumeration
