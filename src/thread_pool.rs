@@ -78,15 +78,6 @@ impl ThreadPoolManager {
 
         Some(handle)
     }
-
-    /// Wait for all threads to complete
-
-    /// Get thread usage statistics
-    pub fn get_thread_stats(&self) -> (usize, usize, usize) {
-        let active = self.active_threads.load(Ordering::Relaxed);
-        let available = self.get_available_threads();
-        (self.max_threads, active, available)
-    }
 }
 
 /// Thread allocation strategy
@@ -146,17 +137,8 @@ impl ThreadMonitor {
         self.writing_threads
     }
 
-    /// Get thread pool manager
-    pub fn get_thread_pool(&mut self) -> &mut ThreadPoolManager {
-        &mut self.thread_pool
-    }
-
     /// Print thread usage statistics
     pub fn print_thread_stats(&self) {
-        let (max, active, available) = self.thread_pool.get_thread_stats();
-        // info!(
-        //     "Thread usage statistics: max={}, active={}, available={}, processing_threads={}, writing_threads={}",
-        //     max, active, available, self.processing_threads, self.writing_threads
-        // );
+        // Thread statistics logging can be enabled here if needed
     }
 }

@@ -91,7 +91,7 @@ async fn execute_main_processing(args: &args::Args) {
         args.outdir.clone(), 
         thread_monitor.get_writing_threads(),
         args.enable_logger,
-        args.compress
+        args.uncompress
     );
     let mut progress_tracker = ProcessInfo::new(args.log_interval);
     

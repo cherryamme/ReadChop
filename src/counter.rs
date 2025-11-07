@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::path::Path;
 use log::info;
-use crate::fastq::{ReadInfo, ReadInfoStats};
+use crate::fastq::ReadInfoStats;
 use std::io::Write;
 
 /// Statistics manager structure
@@ -53,14 +53,6 @@ impl StatisticsManager {
         }
     }
     
-    /// Process single read - memory optimized (deprecated, use process_read_stats instead)
-    #[deprecated(note = "Use process_read_stats for better memory efficiency")]
-    pub fn process_read(&mut self, read_info: &ReadInfo) {
-        // Convert to stats structure for processing
-        let read_stats = read_info.create_stats_copy();
-        self.process_read_stats(&read_stats);
-    }
-    
     /// Process read using lightweight stats structure - memory optimized
     pub fn process_read_stats(&mut self, read_stats: &ReadInfoStats) {
         self.total_reads += 1;
@@ -80,30 +72,6 @@ impl StatisticsManager {
         if self.total_reads % 500000 == 0 {
             self.cleanup_memory();
         }
-    }
-    
-    /// Update detailed statistics
-    fn update_detailed_statistics(&mut self, read_info: &ReadInfo) {
-        let primer = read_info.match_names[0].clone();
-        let index = read_info.match_names[1].clone();
-        let barcode = read_info.match_names[2].clone();
-        let primer_type = read_info.match_types[0].clone();
-        let index_type = read_info.match_types[1].clone();
-        let barcode_type = read_info.match_types[2].clone();
-        
-        // Update name counter
-        let barcode_map = self.valid_name_counters
-            .entry(barcode.clone())
-            .or_insert_with(HashMap::new);
-        let index_map = barcode_map.entry(index.clone()).or_insert_with(HashMap::new);
-        *index_map.entry(primer).or_insert(0) += 1;
-        
-        // Update type counter
-        let barcode_type_map = self.valid_type_counters
-            .entry(barcode_type)
-            .or_insert_with(HashMap::new);
-        let index_type_map = barcode_type_map.entry(index_type).or_insert_with(HashMap::new);
-        *index_type_map.entry(primer_type).or_insert(0) += 1;
     }
     
     /// Update detailed statistics from lightweight stats structure

@@ -95,12 +95,10 @@ fn create_decoder<R: Read + 'static>(
 /// Lightweight statistics structure for memory optimization
 #[derive(Debug, Clone)]
 pub struct ReadInfoStats {
-    pub record_id: String,
     pub sequence_type: String,
     pub sequence_length: usize,
     pub match_types: Vec<String>,
     pub match_names: Vec<String>,
-    pub strand_orientation: String,
 }
 
 /// Sequence information structure - optimized for memory efficiency
@@ -194,12 +192,10 @@ impl ReadInfo {
     /// Create lightweight copy for statistics - memory optimized
     pub fn create_stats_copy(&self) -> ReadInfoStats {
         ReadInfoStats {
-            record_id: self.original_record_id.clone(),
             sequence_type: self.sequence_type.clone(),
             sequence_length: self.sequence_length,
             match_types: self.match_types.clone(),
             match_names: self.match_names.clone(),
-            strand_orientation: self.strand_orientation.clone(),
         }
     }
     

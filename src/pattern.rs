@@ -322,8 +322,6 @@ pub fn load_patterns(args: &Args) -> PatternConfiguration {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    
     #[test]
     fn test_pattern_configuration_creation() {
         // Test code can be added here

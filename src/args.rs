@@ -108,9 +108,9 @@ pub struct Args {
     #[arg(long = "enable_logger")]
     pub enable_logger: bool,
     
-    /// Enable gzip compression for output files (default: false, outputs plain fastq files)
-    #[arg(long = "compress")]
-    pub compress: bool,
+    /// Disable gzip compression for output files (default: false, outputs compressed .fq.gz files)
+    #[arg(long = "uncompress")]
+    pub uncompress: bool,
 }
 
 /// Subcommand enumeration

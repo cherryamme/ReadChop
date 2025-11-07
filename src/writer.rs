@@ -32,7 +32,8 @@ pub struct FileWriterManager {
 
 impl FileWriterManager {
     /// Create file write manager with tag-based sharding
-    pub fn new(output_directory: String, writer_threads: usize, enable_logger: bool, compress: bool) -> Self {
+    pub fn new(output_directory: String, writer_threads: usize, enable_logger: bool, uncompress: bool) -> Self {
+        let compress = !uncompress;
         let compression_status = if compress { "enabled (gz)" } else { "disabled (fastq)" };
         info!("Creating writer manager with {} writer threads, compression: {}...", writer_threads, compression_status);
         
@@ -40,7 +41,7 @@ impl FileWriterManager {
         let mut thread_senders = Vec::new();
         let mut thread_handles = Vec::new();
         
-        for thread_id in 0..writer_threads {
+        for _ in 0..writer_threads {
             let (sender, receiver) = bounded(CHANNEL_CAPACITY);
             thread_senders.push(sender);
             
@@ -48,7 +49,7 @@ impl FileWriterManager {
             let compress_flag = compress;
             
             let handle = thread::spawn(move || {
-                Self::writer_worker(thread_id, receiver, output_dir, compress_flag);
+                Self::writer_worker(receiver, output_dir, compress_flag);
             });
             
             thread_handles.push(handle);
@@ -66,7 +67,6 @@ impl FileWriterManager {
     /// Writer worker thread - processes ReadInfo from its dedicated channel
     /// Each thread only receives data assigned to it based on tag hash
     fn writer_worker(
-        thread_id: usize,
         receiver: Receiver<ReadInfo>,
         output_directory: String,
         compress: bool,
@@ -79,33 +79,17 @@ impl FileWriterManager {
         }
         
         impl Writer {
-            fn write_all(&mut self, buf: &[u8]) -> std::io::Result<()> {
-                match self {
-                    Writer::Compressed(w) => w.write_all(buf),
-                    Writer::Uncompressed(w) => w.write_all(buf),
-                }
-            }
-            
             fn write_fmt(&mut self, fmt: std::fmt::Arguments<'_>) -> std::io::Result<()> {
                 match self {
                     Writer::Compressed(w) => w.write_fmt(fmt),
                     Writer::Uncompressed(w) => w.write_fmt(fmt),
                 }
             }
-            
-            fn flush(&mut self) -> std::io::Result<()> {
-                match self {
-                    Writer::Compressed(w) => w.flush(),
-                    Writer::Uncompressed(w) => w.flush(),
-                }
-            }
         }
         
         let mut writers: HashMap<String, Writer> = HashMap::new();
-        let mut batch_counters: HashMap<String, usize> = HashMap::new();
         
         // Process each ReadInfo from the channel
-        // All data received here is already assigned to this thread
         for mut read_info in receiver.iter() {
             // Skip if not should write
             if !read_info.should_write_to_fastq {
@@ -116,12 +100,9 @@ impl FileWriterManager {
             let tag = read_info.output_filename.clone();
             
             // Get or create writer for this tag
-            let is_new_writer = !writers.contains_key(&tag);
-            if is_new_writer {
+            if !writers.contains_key(&tag) {
                 let file_extension = if compress { ".fq.gz" } else { ".fq" };
-                // 使用 PathBuf 构建路径，避免 format!() 分配
                 let mut file_path = std::path::PathBuf::from(&output_directory);
-                // 使用 push 配合字符串拼接，避免 format!() 分配
                 let mut filename = String::with_capacity(tag.len() + file_extension.len());
                 filename.push_str(&tag);
                 filename.push_str(file_extension);
@@ -130,12 +111,12 @@ impl FileWriterManager {
                 // Create directory
                 if let Some(parent) = file_path.parent() {
                     std::fs::create_dir_all(parent)
-                        .expect(&format!("Failed to create output directory: {:?}", parent));
+                        .unwrap_or_else(|_| panic!("Failed to create output directory: {:?}", parent));
                 }
                 
-                // Open file - use create mode (will overwrite if exists, but should only be created once per thread)
+                // Open file
                 let file = File::create(&file_path)
-                    .expect(&format!("Failed to create output file: {:?}", file_path));
+                    .unwrap_or_else(|_| panic!("Failed to create output file: {:?}", file_path));
                 
                 // Create buffered writer (compressed or uncompressed)
                 let writer = if compress {
@@ -146,7 +127,6 @@ impl FileWriterManager {
                 };
                 
                 writers.insert(tag.clone(), writer);
-                batch_counters.insert(tag.clone(), 0);
             }
             
             // Write the record
@@ -158,14 +138,8 @@ impl FileWriterManager {
                     .expect("Not a valid UTF-8 sequence");
                 
                 let writer = writers.get_mut(&tag).unwrap();
-                // 使用 write!() 宏直接写入，避免 format!() 分配新 String
                 write!(writer, "@{}\n{}\n+\n{}\n", id, seq, qual)
                     .expect("Failed to write record");
-                
-                // Update batch counter
-                let counter = batch_counters.get_mut(&tag).unwrap();
-                *counter += 1;
-                
             }
             
             // Clear large data immediately after writing to free memory
@@ -174,19 +148,16 @@ impl FileWriterManager {
         
         // Final flush all writers
         for (tag, writer) in writers {
-            // For compressed writers, finish the encoder
             match writer {
                 Writer::Compressed(mut w) => {
-                    // Flush the BufWriter first
-                    w.flush().expect(&format!("Failed to flush BufWriter for tag: {}", tag));
-                    // Get the inner GzEncoder and finish it
+                    w.flush().unwrap_or_else(|_| panic!("Failed to flush BufWriter for tag: {}", tag));
                     let encoder = w.into_inner()
-                        .expect(&format!("Failed to get encoder for tag: {}", tag));
+                        .unwrap_or_else(|_| panic!("Failed to get encoder for tag: {}", tag));
                     encoder.finish()
-                        .expect(&format!("Failed to finish compression for tag: {}", tag));
+                        .unwrap_or_else(|_| panic!("Failed to finish compression for tag: {}", tag));
                 },
                 Writer::Uncompressed(mut w) => {
-                    w.flush().expect(&format!("Failed to flush writer for tag: {}", tag));
+                    w.flush().unwrap_or_else(|_| panic!("Failed to flush writer for tag: {}", tag));
                 },
             }
         }
@@ -203,29 +174,25 @@ impl FileWriterManager {
     /// This provides backpressure: when channel is full, send blocks
     /// Routes data to the correct thread based on tag hash
     pub fn write(&mut self, read_info: ReadInfo) -> std::io::Result<()> {
-        // Calculate which thread should handle this tag
-        let tag = &read_info.output_filename;
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
+        
         let mut hasher = DefaultHasher::new();
-        tag.hash(&mut hasher);
-        let hash_value = hasher.finish();
-        let assigned_thread = (hash_value as usize) % self.num_threads;
+        read_info.output_filename.hash(&mut hasher);
+        let assigned_thread = (hasher.finish() as usize) % self.num_threads;
         
         // Send to the assigned thread's channel - this will block if channel is full (backpressure)
-        if let Some(sender) = self.thread_senders.get(assigned_thread) {
-            sender.send(read_info)
-                .expect("Failed to send read info to writer channel");
-        }
+        self.thread_senders[assigned_thread]
+            .send(read_info)
+            .expect("Failed to send read info to writer channel");
         
         Ok(())
     }
     
     /// Expand writer concurrency after splitter completes
-    /// This method is kept for API compatibility but doesn't need to do anything
+    /// With the channel-based design, work is distributed automatically
     pub fn expand_concurrency(&self, _additional_threads: usize) {
-        // Note: With the channel-based design, work is distributed automatically
-        // This method is kept for API compatibility but doesn't need to do anything
+        // No-op: work is already distributed via channels
     }
 
     /// Write log file (only if logger is enabled)
@@ -240,14 +207,10 @@ impl FileWriterManager {
         info!("Writing logs to reads_log.gz");
         let file_path = directory_path.join("reads_log.gz");
         let file = File::create(file_path)?;
-        
-        // Use flate2 for gzip compression
-        use flate2::write::GzEncoder;
-        use flate2::Compression;
         let mut encoder = GzEncoder::new(file, Compression::new(1));
         
         for line in &self.logger {
-            encoder.write_all(line.as_ref())?;
+            encoder.write_all(line.as_bytes())?;
             encoder.write_all(b"\n")?;
         }
         
