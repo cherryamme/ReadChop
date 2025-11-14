@@ -36,8 +36,8 @@ pub struct Args {
     #[arg(short, long, default_value = "outdir")]
     pub outdir: String,
     
-    /// Number of threads
-    #[arg(short, long, default_value = "20")]
+    /// Number of threads (must be greater than 2)
+    #[arg(short, long, default_value = "20", value_parser = validate_threads)]
     pub threads: usize,
     
     /// Minimum sequence length filter threshold
@@ -132,8 +132,8 @@ pub enum Commands {
         /// Pattern database file
         #[arg(short = 'd', long = "db", required = true)]
         pattern_db_file: String,
-        /// Number of threads
-        #[arg(short, long, default_value = "20")]
+        /// Number of threads (must be greater than 2)
+        #[arg(short, long, default_value = "20", value_parser = validate_threads)]
         threads: usize,
         /// Minimum sequence length filter threshold
         #[arg(short, long, default_value = "100")]
@@ -166,6 +166,15 @@ pub enum Commands {
         #[arg(long = "write_all")]
         write_all: bool,
     },
+}
+
+/// Validate threads parameter (must be greater than 2)
+fn validate_threads(input: &str) -> Result<usize, String> {
+    match input.parse::<usize>() {
+        Ok(value) if value >= 2 => Ok(value),
+        Ok(_) => Err("Threads must be greater than 2 or equal to 2".to_string()),
+        Err(_) => Err("Threads must be a valid integer".to_string()),
+    }
 }
 
 /// Validate error rate parameters
