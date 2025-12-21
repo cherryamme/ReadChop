@@ -21,6 +21,12 @@ ReadChop is designed specifically for third-generation sequencing data, used to 
 - **Database encryption**: Encrypt pattern database files for security
 - **Fusion detection**: Optional fusion sequence detection
 
+## Benchmark
+
+Performance comparison of ReadChop with Cutadapt, Nanoplexer, and PoreChop on 1M reads (CPU usage and memory consumption):
+
+![Benchmark Results](assets/Figure3.pdf)
+
 ## Installation
 
 ### Build from Source
