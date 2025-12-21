@@ -25,7 +25,7 @@ ReadChop is designed specifically for third-generation sequencing data, used to 
 
 Performance comparison of ReadChop with Cutadapt, Nanoplexer, and PoreChop on 1M reads (CPU usage and memory consumption):
 
-![Benchmark Results](assets/Figure3.pdf)
+![Benchmark Results](assets/Figure3.png)
 
 ## Installation
 
