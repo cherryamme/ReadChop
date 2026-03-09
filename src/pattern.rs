@@ -7,6 +7,9 @@ use age::secrecy::SecretString;
 use std::fs::File;
 use std::io::{Read, Write};
 
+/// Compile-time fixed passphrase - embedded in the binary via build.rs
+static COMPILE_TIME_PASSPHRASE: &str = option_env!("READCHOP_PASSPHRASE").unwrap();
+
 /// Pattern parameter configuration structure
 #[derive(Debug, Clone)]
 pub struct PatternConfiguration {
@@ -124,7 +127,9 @@ impl PatternDatabase {
     
     /// Load pattern data
     pub fn load_patterns(&mut self, database_file: &str, pattern_file: &str) {
-        let pattern_database = self.load_database(database_file, "666666");
+        // Use compile-time passphrase
+        let passphrase = COMPILE_TIME_PASSPHRASE;
+        let pattern_database = self.load_database(database_file, passphrase);
         self.load_pattern_file(pattern_file, pattern_database);
     }
     
