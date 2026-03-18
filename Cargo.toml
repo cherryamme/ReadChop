@@ -1,6 +1,6 @@
 [package]
 name = "readchop"
-version = "1.0.1"
+version = "1.0.2"
 edition = "2024"
 authors = ["jiangchen"]
 description = "(2025-09-18) ReadChop is a command-line tool designed specifically for third-generation sequencing data, used to split long-read FASTQ/GZ files based on specified patterns."
