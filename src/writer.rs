@@ -1,7 +1,8 @@
-use std::collections::HashMap;
-use std::fs::File;
+use std::collections::{HashMap, VecDeque};
+use std::fs::{File, OpenOptions};
 use std::io::{BufWriter, Write};
 use std::path::Path;
+use std::sync::{Arc, Mutex};
 use std::thread;
 use flume::{bounded, Receiver, Sender};
 use log::info;
@@ -41,15 +42,19 @@ impl FileWriterManager {
         let mut thread_senders = Vec::new();
         let mut thread_handles = Vec::new();
         
+        // Create a global directory creation lock to prevent cluster filesystem concurrent race conditions
+        let dir_lock = Arc::new(Mutex::new(()));
+        
         for _ in 0..writer_threads {
             let (sender, receiver) = bounded(CHANNEL_CAPACITY);
             thread_senders.push(sender);
             
             let output_dir = output_directory.clone();
             let compress_flag = compress;
+            let dir_lock_clone = Arc::clone(&dir_lock);
             
             let handle = thread::spawn(move || {
-                Self::writer_worker(receiver, output_dir, compress_flag);
+                Self::writer_worker(receiver, output_dir, compress_flag, dir_lock_clone);
             });
             
             thread_handles.push(handle);
@@ -70,6 +75,7 @@ impl FileWriterManager {
         receiver: Receiver<ReadInfo>,
         output_directory: String,
         compress: bool,
+        dir_lock: Arc<Mutex<()>>,
     ) {
         // HashMap to store file writers for each tag (output_filename)
         // Use enum to handle both compressed and uncompressed writers
@@ -89,6 +95,13 @@ impl FileWriterManager {
         
         let mut writers: HashMap<String, Writer> = HashMap::new();
         
+        // 用于记录文件打开顺序的队列（FIFO）
+        let mut open_queue: VecDeque<String> = VecDeque::new();
+        
+        // 每个线程最多同时保持 50 个打开的文件
+        // 10个线程总共 500 个，对集群毫无压力
+        const MAX_OPEN_FILES: usize = 50;
+        
         // Process each ReadInfo from the channel
         for mut read_info in receiver.iter() {
             // Skip if not should write
@@ -101,6 +114,24 @@ impl FileWriterManager {
             
             // Get or create writer for this tag
             if !writers.contains_key(&tag) {
+                
+                // 【核心新增：如果达到上限，踢出（关闭）最老的文件】
+                if writers.len() >= MAX_OPEN_FILES {
+                    if let Some(oldest_tag) = open_queue.pop_front() {
+                        if let Some(writer) = writers.remove(&oldest_tag) {
+                            match writer {
+                                Writer::Compressed(mut w) => {
+                                    w.flush().unwrap();
+                                    w.into_inner().unwrap().finish().unwrap();
+                                },
+                                Writer::Uncompressed(mut w) => {
+                                    w.flush().unwrap();
+                                }
+                            }
+                        }
+                    }
+                }
+
                 let file_extension = if compress { ".fq.gz" } else { ".fq" };
                 let mut file_path = std::path::PathBuf::from(&output_directory);
                 let mut filename = String::with_capacity(tag.len() + file_extension.len());
@@ -108,16 +139,42 @@ impl FileWriterManager {
                 filename.push_str(file_extension);
                 file_path.push(&filename);
                 
-                // Create directory
+                // Create directory with thread-safe lock
                 if let Some(parent) = file_path.parent() {
-                    std::fs::create_dir_all(parent)
-                        .unwrap_or_else(|_| panic!("Failed to create output directory: {:?}", parent));
+                    // First check without lock for performance optimization
+                    if !parent.exists() {
+                        let _lock = dir_lock.lock().unwrap();
+                        // Check again after acquiring lock to prevent other threads from just creating it
+                        if !parent.exists() {
+                            std::fs::create_dir_all(parent)
+                                .unwrap_or_else(|_| panic!("Failed to create output directory: {:?}", parent));
+                            // Give cluster MDS some time to sync permission information
+                            std::thread::sleep(std::time::Duration::from_millis(20));
+                        }
+                    }
                 }
                 
-                // Open file
-                let file = File::create(&file_path)
-                    .unwrap_or_else(|_| panic!("Failed to create output file: {:?}", file_path));
-                
+                // Open file with enhanced retry mechanism for cluster filesystems
+                // 使用 append(true) 而非 truncate(true)，因为文件可能会被关闭后再次打开写入
+                let mut attempts = 0;
+                let file = loop {
+                    match OpenOptions::new()
+                        .write(true)
+                        .create(true)
+                        .append(true)  // 使用追加模式，允许断点续写
+                        .open(&file_path) 
+                    {
+                        Ok(f) => break f,
+                        Err(e) => {
+                            attempts += 1;
+                            if attempts >= 5 {
+                                panic!("Failed to open file {:?} after 5 attempts: {}", file_path, e);
+                            }
+                            // Gradual delay to wait for cluster to release ghost locks
+                            std::thread::sleep(std::time::Duration::from_millis(100 * attempts as u64));
+                        }
+                    }
+                };
                 // Create buffered writer (compressed or uncompressed)
                 let writer = if compress {
                     let encoder = GzEncoder::new(file, Compression::new(1));
@@ -127,6 +184,7 @@ impl FileWriterManager {
                 };
                 
                 writers.insert(tag.clone(), writer);
+                open_queue.push_back(tag.clone()); // 记录到队列末尾
             }
             
             // Write the record
