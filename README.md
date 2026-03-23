@@ -80,22 +80,16 @@ readchop [OPTIONS] --pattern-files <PATTERN_FILES>... --db <PATTERN_DB_FILE>
 | `--pattern-files` | `-p` | Pattern file list (one or more files) |
 | `--db` | `-d` | Pattern database file |
 
-## Commands
+### Commands
 
 ### view - Preview Results
 
 Preview barcode detection results with color highlighting:
 
 ```bash
-readchop view -i input.fastq -d pattern.db -p pattern_list.txt | less
-```
-
-### encrypt - Encrypt Database
-
-Encrypt pattern database file:
-
-```bash
-readchop encrypt pattern_database.db
+readchop view -i example/example.fastq \
+    -d example/pattern.db \
+    -p example/barcode.list
 ```
 
 ## Examples
@@ -106,9 +100,9 @@ This is the default and most common use case, suitable for datasets where reads 
 
 ```bash
 readchop \
-    -i input.fastq \
-    -d pattern.db \
-    -p pattern_list.list \
+    -i example/example.fastq \
+    -d example/pattern.db \
+    -p example/barcode.list \
     -o output_dir
 ```
 
@@ -117,19 +111,19 @@ This mode is essential when your library preparation involves tags at both ends 
 
 ```bash
 readchop \
-    -i input.fastq \
-    -d pattern.db \
-    -p pattern_list.txt \
+    -i example/example.fastq \
+    -d example/pattern.db \
+    -p example/barcode.list \
     -o output_dir \
     --match dual \
     -w 150,150 \
     -e 0.3,0.3
 ```
-`--match dual`: Ensures that a read is only successfully classified if both specified barcodes are found at 5' end and 3' end.
+- `--match dual`: Ensures that a read is only successfully classified if both specified barcodes are found at 5' end and 3' end.
 
-`-w 150,500` (Window Size): Restricts the search window to 150 bp at the 5' end and 150 bp at the 3' end. Narrowing the window reduces false-positive matches in the middle of the read.
+- `-w 150,150` (Window Size): Restricts the search window to 150 bp at the 5' end and 150 bp at the 3' end. Narrowing the window reduces false-positive matches in the middle of the read.
 
-`-e 0.3,0.3` (Error Rate): Upper the allowed error rate (mismatches/indels) to 30% for both 5' end and 3' end, ensuring higher assignment rate.
+- `-e 0.3,0.3` (Error Rate): Upper the allowed error rate (mismatches/indels) to 30% for both 5' end and 3' end, ensuring higher assignment rate.
 
 ### Example 3: Multi-level Indexing Mode (Combinatorial Barcoding & Barcoded Primers)
 For complex library designs, reads often contain multiple barcodes in a single sequence. This mode is highly adaptable not only for standard combinatorial barcodes but also for demultiplexing **barcoded primers**. 
@@ -147,13 +141,13 @@ readchop \
     -o multi_level_output
 ```
 
-`-p level1_barcode.list level2_barcode.list` (Pattern Files): Accepts the sequence pairs to be demultiplexed. We recommend placing the inner barcode file first (as level1).
+- `-p level1_barcode.list level2_barcode.list` (Pattern Files): Accepts the sequence pairs to be demultiplexed. We recommend placing the inner barcode file first (as level1).
 
-`-e 0.3,0.3 0.2,0.2` (Error Rate): Allows you to set different error rates for barcodes at different levels. In this example, the first level has a 30% error tolerance, while the second level is set to 20%.
+- `-e 0.3,0.3 0.2,0.2` (Error Rate): Allows you to set different error rates for barcodes at different levels. In this example, the first level has a 30% error tolerance, while the second level is set to 20%.
 
-`--match dual single` (Match Strategy): Applies distinct demultiplexing strategies for different levels. Here, the first level requires dual-end matching, and the second level requires only single-end matching.
+- `--match dual single` (Match Strategy): Applies distinct demultiplexing strategies for different levels. Here, the first level requires dual-end matching, and the second level requires only single-end matching.
 
-`--trim-mode 1` (Custom Trimming): In this multi-level context, setting this to 1 specifically means that the barcode sequences from the first pattern file (level1_barcode.list) will be retained in the output data, while the outer barcodes are trimmed off.
+- `--trim-mode 1` (Custom Trimming): In this multi-level context, setting this to 1 specifically means that the barcode sequences from the first pattern file (level1_barcode.list) will be retained in the output data, while the outer barcodes are trimmed off.
 
 For more details, please refer to Section 1_complex_64 of the manuscript, which features a multi-level(64 and 13824 plex) example. The manuscript is available at: [ReadChop-manuscript-code](https://github.com/cherryamme/ReadChop-manuscript)
 
@@ -169,12 +163,12 @@ readchop \
     -p example/barcode.list \
     -o filtered_output/ \
     --f example/fusion.list \
-    --fe 0.25
+    --fe 0.1
 ```
 
-`-f fusion.list`: Specifies a file containing adapter or linker id in patter.db that should not appear in the middle of a valid biological read. ReadChop scans for these patterns to detect chimeras.
+- `-f example/fusion.list`: Specifies a file containing adapter or linker id in patter.db that should not appear in the middle of a valid biological read. ReadChop scans for these patterns to detect chimeras.
 
-`--fe 0.1` (Fusion Error Rate): Sets the matching error rate for chimeric reads detection (default is 0.2, here decreased to 0.1).
+- `--fe 0.1` (Fusion Error Rate): Sets the matching error rate for chimeric reads detection (default is 0.2, here decreased to 0.1).
 
 ### Example 5: Database Encryption for Proprietary Designs
 For commercial laboratories and core facilities, distributing demultiplexing pipelines often involves sharing proprietary, experimentally optimized barcode sequences or clinical multiplex primer panels (e.g., in pathogen detection workflows). ReadChop provides an encryption module to compile your plain-text patterns into a secure, non-plaintext database (`.db`) file, protecting your intellectual property.
@@ -205,11 +199,36 @@ You can now distribute the compiled binary and the pattern.db.safe file to your 
 
 ```
 readchop \
-    -i input.fastq \
-    -d pattern.db.safe \
-    -p pattern_list.list \
+    -i example/example.fastq \
+    -d example/pattern.db.safe \
+    -p example/barcode.list \
     -o output_dir
 ```
+### Example 6: Debug and Preview Mode
+If you want to investigate why specific reads are unassigned or missed, it is highly recommended to use the `view` command. This allows you to preview exactly how ReadChop evaluates and detects barcodes on a small subset of reads, helping you fine-tune parameters like window size or error rate.
+
+```bash
+readchop view \
+    -i example/example.fastq \
+    -d example/pattern.db \
+    -p example/barcode.list
+```
+
+Example Output:
+```
+Sequence ID: 68fb09b6-71a6-0b20-ab91-6691526be100_Barcode2,-strand,0-5048 Length: 5049
+Sequence: TTCGTTCAGTTACGTATTGCTTCGATTCCGTTTGTAGTCGTCTGTCCAAGCGTCCCTATATGACCACAGCTAAACTGTTAGAATCGGTACC...TTTGTAGCATAGGTCTTAGAAGATTTGTTAAGCCGCTCCCCGACAGCATTTATATACCAACAGACGACTACAAACGGAATCGAGCAATACG
+Detected patterns: (BC02_BC02,0,21,45) (BC02_BC02,0,5017,5041)
+```
+
+Understanding the Output:
+The view mode provides a clear breakdown of the read:
+
+Sequence ID & Length: Basic information about the processed read.
+
+Sequence: The actual nucleotide sequence (truncated for display).
+
+Detected patterns: Shows exactly which barcodes were identified, along with their matching metrics. For instance, (BC02_BC02,0,21,45) indicates that the BC02 pattern was found with 0 errors, starting at position 21 and ending at position 45 (near the 5' end). The second tuple shows it was also found near the 3' end (positions 5017 to 5041).
 
 
 ## File Formats
