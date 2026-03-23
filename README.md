@@ -172,7 +172,7 @@ Pass your custom password as an environment variable during the build process. O
 If you compile the software without explicitly providing a custom password, ReadChop will automatically default to using the compiling machine's unique hardware code as the encryption key.
 ```bash
 # Example: Injecting a custom key during compilation
-RC_ENCRYPT_KEY="YourSuperSecretKey" cargo build --release
+READCHOP_PASSPHRASE="YourSuperSecretKey" cargo build --release
 ```
 #### Step 2: Encrypting the Database
 Once compiled, use the encrypt command to convert your standard pattern database into a secure file.
