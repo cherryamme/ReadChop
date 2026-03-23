@@ -80,30 +80,6 @@ readchop [OPTIONS] --pattern-files <PATTERN_FILES>... --db <PATTERN_DB_FILE>
 | `--pattern-files` | `-p` | Pattern file list (one or more files) |
 | `--db` | `-d` | Pattern database file |
 
-### Common Options
-
-| Option | Short | Description | Default |
-|--------|-------|-------------|---------|
-| `--inputs` | `-i` | Input file paths (one or more files) | - |
-| `--outdir` | `-o` | Output directory name | `outdir` |
-| `--threads` | `-t` | Number of threads (must be > 2) | `20` |
-| `--min-length` | `-m` | Minimum sequence length filter threshold | `100` |
-| `--window-size` | `-w` | Search window size `<left,right>` | `400,400` |
-| `--pattern-error-rate` | `-e` | Pattern matching error rate `<left,right>` (0-0.5) | `0.2,0.2` |
-| `--match` | | Pattern matching type: `single` or `dual` | `single` |
-| `--trim-mode` | | Sequence trimming mode: 0=trim all, 1=keep one pattern, 2=keep two patterns... | `0` |
-| `--write-type` | | Write type: `names` (use names) or `type` (use types) | `type` |
-| `--pos` | | Use position information for more precise detection | `false` |
-| `--shift` | | Position offset for multi-pattern splitting | `3` |
-| `--maxdist` | | Maximum distance threshold | `4` |
-| `--id_sep` | | Record ID separator | `%` |
-| `--fusion` | `-f` | Fusion detection file | - |
-| `--fe` | | Fusion detection error rate | `0.2` |
-| `--write_all` | | Write all reads including unknown sequences | `false` |
-| `--enable_logger` | | Enable logger to write reads_log.gz file | `false` |
-| `--uncompress` | | Disable gzip compression for output files | `false` |
-| `--num` | `-n` | Log recording interval | `500000` |
-
 ## Commands
 
 ### view - Preview Results
@@ -125,17 +101,19 @@ readchop encrypt pattern_database.db
 ## Examples
 
 ### Example 1: Basic Demultiplexing
+Standard Single-End Demultiplexing
+This is the default and most common use case, suitable for datasets where reads are tagged with a single barcode at the beginning (5' end) of the sequence or end (3' end) of the sequence.
 
 ```bash
 readchop \
-    -i example/example.fastq \
-    -d example/ont_bc_pattern.db \
-    -p example/ont_bc_index.list \
-    -o output_dir \
-    -t 8
+    -i input.fastq \
+    -d pattern.db \
+    -p pattern_list.list \
+    -o output_dir
 ```
 
 ### Example 2: Dual Pattern Matching
+This mode is essential when your library preparation involves tags at both ends of the read (e.g., to reduce barcode crosstalk) or when you are demultiplexing targeted amplicon sequencing data (e.g., 16S/ITS or custom gene panels) based on specific forward and reverse primers. You should enforce dual matching and can adjust the search window if you know the adapters/primers are located further inward.
 
 ```bash
 readchop \
@@ -144,17 +122,93 @@ readchop \
     -p pattern_list.txt \
     -o output_dir \
     --match dual \
-    -w 100,100 \
+    -w 150,150 \
     -e 0.3,0.3
 ```
+`--match dual`: Ensures that a read is only successfully classified if both specified barcodes are found at 5' end and 3' end.
 
-### Example 3: Preview Mode
+`-w 150,500` (Window Size): Restricts the search window to 150 bp at the 5' end and 150 bp at the 3' end. Narrowing the window reduces false-positive matches in the middle of the read.
+
+`-e 0.3,0.3` (Error Rate): Upper the allowed error rate (mismatches/indels) to 30% for both 5' end and 3' end, ensuring higher assignment rate.
+
+### Example 3: Multi-level Indexing Mode (Combinatorial Barcoding & Barcoded Primers)
+For complex library designs, reads often contain multiple barcodes in a single sequence. This mode is highly adaptable not only for standard combinatorial barcodes but also for demultiplexing **barcoded primers**. 
+
+A classic real-world application is the **Oxford Nanopore 2304-Plex** (24 x 96) Ligation sequencing DNA V14 - dual barcoding setup (SQK-NBD114.24 with EXP-PBC096, see [official documentation](https://nanoporetech.com/document/ligation-sequencing-dual-barcoding-v14)). ReadChop handles this seamlessly by accepting multiple pattern files and allowing layer-specific configurations.
 
 ```bash
-readchop view \
+readchop \
     -i example/example.fastq \
-    -d example/ont_bc_pattern.db \
-    -p example/ont_bc_index.list | less
+    -d example/pattern.db \
+    -e 0.3,0.3 0.2,0.2 \
+    --match dual single \
+    -p level1_barcode.list level2_barcode.list \
+    --trim-mode 1 \
+    -o multi_level_output
+```
+
+`-p level1_barcode.list level2_barcode.list` (Pattern Files): Accepts the sequence pairs to be demultiplexed. We recommend placing the inner barcode file first (as level1).
+
+`-e 0.3,0.3 0.2,0.2` (Error Rate): Allows you to set different error rates for barcodes at different levels. In this example, the first level has a 30% error tolerance, while the second level is set to 20%.
+
+`--match dual single` (Match Strategy): Applies distinct demultiplexing strategies for different levels. Here, the first level requires dual-end matching, and the second level requires only single-end matching.
+
+`--trim-mode 1` (Custom Trimming): In this multi-level context, setting this to 1 specifically means that the barcode sequences from the first pattern file (level1_barcode.list) will be retained in the output data, while the outer barcodes are trimmed off.
+
+For more details, please refer to Section 1_complex_64 of the manuscript, which features a multi-level(64 and 13824 plex) example. The manuscript is available at: [ReadChop-manuscript-code](https://github.com/cherryamme/ReadChop-manuscript)
+
+
+
+### Example 4: Chimeric/Fusion Reads Filtering
+In long-read sequencing platforms like Oxford Nanopore or PacBio, artificial ligation during library preparation can create chimeric reads. These reads typically contain adapter or barcode sequences improperly located in the middle of the read. ReadChop provides a dedicated fusion detection mode to identify and filter out these artifacts.
+
+```bash
+readchop \
+    -i example/example.fastq \
+    -d example/pattern.db \
+    -p example/barcode.list \
+    -o filtered_output/ \
+    --f example/fusion.list \
+    --fe 0.25
+```
+
+`-f fusion.list`: Specifies a file containing adapter or linker id in patter.db that should not appear in the middle of a valid biological read. ReadChop scans for these patterns to detect chimeras.
+
+`--fe 0.1` (Fusion Error Rate): Sets the matching error rate for chimeric reads detection (default is 0.2, here decreased to 0.1).
+
+### Example 5: Database Encryption for Proprietary Designs
+For commercial laboratories and core facilities, distributing demultiplexing pipelines often involves sharing proprietary, experimentally optimized barcode sequences or clinical multiplex primer panels (e.g., in pathogen detection workflows). ReadChop provides an encryption module to compile your plain-text patterns into a secure, non-plaintext database (`.db`) file, protecting your intellectual property.
+
+To maximize security, ReadChop does not use hardcoded passwords. The decryption key is securely injected into the software binary during the compilation phase. 
+
+#### Step 1: Secure Compilation
+You must compile ReadChop from source to define the encryption behavior.
+Pass your custom password as an environment variable during the build process. Only this specific compiled binary will be able to read databases encrypted by it.
+If you compile the software without explicitly providing a custom password, ReadChop will automatically default to using the compiling machine's unique hardware code as the encryption key.
+```bash
+# Example: Injecting a custom key during compilation
+RC_ENCRYPT_KEY="YourSuperSecretKey" cargo build --release
+```
+#### Step 2: Encrypting the Database
+Once compiled, use the encrypt command to convert your standard pattern database into a secure file.
+
+```bash
+# Encrypt the database file
+./target/release/readchop encrypt example/pattern.db
+
+# This will automatically generate a secure database file named 'pattern.db.safe'
+# in the same directory. You can now keep the original 'pattern.db' private.
+```
+
+#### Step 3: Seamless Demultiplexing with the Secure Database
+You can now distribute the compiled binary and the pattern.db.safe file to your end-users or automated pipelines. The end-user does not need to enter a password; simply use .db.safe instead of .db. The binary will seamlessly decrypt the database in memory and perform the demultiplexing.
+
+```
+readchop \
+    -i input.fastq \
+    -d pattern.db.safe \
+    -p pattern_list.list \
+    -o output_dir
 ```
 
 
@@ -175,6 +229,7 @@ BC03	BC03	ONT-BC03
 
 - Supports standard FASTQ format
 - Supports compressed `.gz` files
+- Supports pipe stdin
 
 ### Output Files
 
