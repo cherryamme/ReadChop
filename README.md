@@ -27,6 +27,9 @@ Performance comparison of ReadChop with Cutadapt, Nanoplexer, and PoreChop on 1M
 
 ![Benchmark Results](assets/Figure3.png)
 
+
+![Benchmark Results mem](assets/Figure4.png)
+
 ## Installation
 
 ### Build from Source
@@ -79,18 +82,6 @@ readchop [OPTIONS] --pattern-files <PATTERN_FILES>... --db <PATTERN_DB_FILE>
 |--------|-------|-------------|
 | `--pattern-files` | `-p` | Pattern file list (one or more files) |
 | `--db` | `-d` | Pattern database file |
-
-### Commands
-
-### view - Preview Results
-
-Preview barcode detection results with color highlighting:
-
-```bash
-readchop view -i example/example.fastq \
-    -d example/pattern.db \
-    -p example/barcode.list
-```
 
 ## Examples
 
@@ -222,13 +213,13 @@ Detected patterns: (BC02_BC02,0,21,45) (BC02_BC02,0,5017,5041)
 ```
 
 Understanding the Output:
-The view mode provides a clear breakdown of the read:
+The `view` mode provides a clear breakdown of the read:
 
-Sequence ID & Length: Basic information about the processed read.
+- Sequence ID & Length: Basic information about the processed read.
 
-Sequence: The actual nucleotide sequence (truncated for display).
+- Sequence: The actual nucleotide sequence (truncated for display).
 
-Detected patterns: Shows exactly which barcodes were identified, along with their matching metrics. For instance, (BC02_BC02,0,21,45) indicates that the BC02 pattern was found with 0 errors, starting at position 21 and ending at position 45 (near the 5' end). The second tuple shows it was also found near the 3' end (positions 5017 to 5041).
+- Detected patterns: Shows exactly which barcodes were identified, along with their matching metrics. For instance, (BC02_BC02,0,21,45) indicates that the BC02 pattern was found with 0 errors, starting at position 21 and ending at position 45 (near the 5' end). The second tuple shows it was also found near the 3' end (positions 5017 to 5041).
 
 
 ## File Formats
