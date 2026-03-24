@@ -6,10 +6,10 @@ A high-performance command-line tool for demultiplexing third-generation sequenc
 
 ReadChop is designed specifically for third-generation sequencing data, used to split long-read FASTQ/GZ files based on specified patterns. It supports multi-threaded parallel processing, providing efficient sequence demultiplexing and barcode identification capabilities.
 
-**Version:** 1.0.0 
+**Version:** 1.0.2
 **Author:** jiangchen  
 **Email:** cherryamme@qq.com  
-**Release Date:** 2025-09-18
+**Release Date:** 2026-03-24
 
 ## Features
 
@@ -20,6 +20,12 @@ ReadChop is designed specifically for third-generation sequencing data, used to 
 - **Preview mode**: Preview demultiplexing results with color highlighting
 - **Database encryption**: Encrypt pattern database files for security
 - **Fusion detection**: Optional fusion sequence detection
+
+## Kits
+
+Pre-configured barcode kits for Oxford Nanopore Technologies (ONT) sequencing data are available in the [`kits/`](kits/) directory. Each subdirectory contains ready-to-use pattern files and barcode sequence databases for common ONT barcode kits.
+
+See [`kits/README.md`](kits/README.md) for details.
 
 ## Benchmark
 
@@ -237,14 +243,14 @@ BC03	BC03	ONT-BC03
 
 ### Input Format
 
-ReadChop 支持多种输入格式：
+ReadChop supports multiple input formats:
 
-| 格式 | 说明 | 示例命令 |
-|------|------|----------|
-| FASTQ | 标准 FASTQ 文件 | `-i example.fastq` |
-| 压缩文件 | `.gz` 压缩的 FASTQ 文件 | `-i example.fastq.gz` |
-| 标准输入 | 通过管道输入 FASTQ 数据 | `cat example.fastq \| readchop ...` |
-| BAM 文件 | 通过 samtools 转换后输入 | `samtools fastq input.bam \| readchop ...` |
+| Format | Description | Example Command |
+|--------|-------------|-----------------|
+| FASTQ | Standard FASTQ file | `-i example.fastq` |
+| Compressed | `.gz` compressed FASTQ file | `-i example.fastq.gz` |
+| Standard Input | Input FASTQ data via pipe | `cat example.fastq \| readchop ...` |
+| BAM File | Input after conversion via samtools | `samtools fastq input.bam \| readchop ...` |
 
 
 ### Output Files
@@ -262,8 +268,8 @@ The `example/` folder contains test data files for testing and demonstration:
 
 - `example.fastq` - Sample FASTQ file
 - `example.fasta` - Sample FASTA file
-- `ont_bc_index.list` - Pattern index list file
-- `ont_bc_pattern.db` - Pattern database file
+- `barcode.list` - Pattern index list file
+- `pattern.db` - Pattern database file
 
 
 
