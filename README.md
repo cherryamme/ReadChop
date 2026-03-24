@@ -237,9 +237,15 @@ BC03	BC03	ONT-BC03
 
 ### Input Format
 
-- Supports standard FASTQ format
-- Supports compressed `.gz` files
-- Supports pipe stdin
+ReadChop 支持多种输入格式：
+
+| 格式 | 说明 | 示例命令 |
+|------|------|----------|
+| FASTQ | 标准 FASTQ 文件 | `-i example.fastq` |
+| 压缩文件 | `.gz` 压缩的 FASTQ 文件 | `-i example.fastq.gz` |
+| 标准输入 | 通过管道输入 FASTQ 数据 | `cat example.fastq \| readchop ...` |
+| BAM 文件 | 通过 samtools 转换后输入 | `samtools fastq input.bam \| readchop ...` |
+
 
 ### Output Files
 
