@@ -9,6 +9,7 @@ use std::io::{Read, Write};
 
 /// Compile-time fixed passphrase - embedded in the binary via build.rs
 static COMPILE_TIME_PASSPHRASE: &str = option_env!("READCHOP_PASSPHRASE").unwrap();
+static COMPILE_TIME_PASSPHRASE_SOURCE: &str = option_env!("READCHOP_PASSPHRASE_SOURCE").unwrap();
 
 /// Pattern parameter configuration structure
 #[derive(Debug, Clone)]
@@ -80,16 +81,18 @@ pub struct PatternArgument {
 }
 
 /// Encrypt pattern database file
-pub fn encrypt_pattern_database(file_path: &str, passphrase: &str) {
+pub fn encrypt_pattern_database(file_path: &str) {
     let mut file = File::open(file_path)
         .expect(&format!("Unable to find file: {}", file_path));
-    
+
     let mut content = Vec::new();
     file.read_to_end(&mut content)
         .expect("Failed to read file content");
 
+    info!("Encrypting pattern database with {}", COMPILE_TIME_PASSPHRASE_SOURCE);
+
     // Encrypt content
-    let secret_passphrase = SecretString::from(passphrase.to_owned());
+    let secret_passphrase = SecretString::from(COMPILE_TIME_PASSPHRASE.to_owned());
     let recipient = age::scrypt::Recipient::new(secret_passphrase);
     let encrypted_data = age::encrypt(&recipient, &content)
         .expect("Failed to encrypt data");
@@ -128,8 +131,7 @@ impl PatternDatabase {
     /// Load pattern data
     pub fn load_patterns(&mut self, database_file: &str, pattern_file: &str) {
         // Use compile-time passphrase
-        let passphrase = COMPILE_TIME_PASSPHRASE;
-        let pattern_database = self.load_database(database_file, passphrase);
+        let pattern_database = self.load_database(database_file, COMPILE_TIME_PASSPHRASE);
         self.load_pattern_file(pattern_file, pattern_database);
     }
     
@@ -139,6 +141,8 @@ impl PatternDatabase {
         let mut content = Vec::new();
 
         if file_path.ends_with(".safe") {
+            info!("Decrypting pattern database with {}", COMPILE_TIME_PASSPHRASE_SOURCE);
+
             // Decrypt file
             let secret_passphrase = SecretString::from(passphrase.to_owned());
             let identity = age::scrypt::Identity::new(secret_passphrase);
@@ -331,7 +335,7 @@ mod tests {
     fn test_pattern_configuration_creation() {
         // Test code can be added here
     }
-    
+
     #[test]
     fn test_pattern_database_loading() {
         // Test code can be added here

@@ -56,7 +56,7 @@ cargo build --release
 - **Rust**: 1.70+
 - **Operating System**: Linux, macOS, Windows
 - **Memory**: Recommended 4GB+
-- **Threads**: Must be greater than 2 (default: 20)
+- **Threads**: Must be at least 2 (default: 20)
 
 ## Quick Start
 
@@ -67,8 +67,8 @@ cargo build --release
 # Run with example data (see example/ folder for test data)
 ./target/release/readchop \
     -i example/example.fastq \
-    -d example/ont_bc_pattern.db \
-    -p example/ont_bc_index.list \
+    -d example/pattern.db \
+    -p example/barcode.list \
     -o output_dir
 ```
 
@@ -159,11 +159,11 @@ readchop \
     -d example/pattern.db \
     -p example/barcode.list \
     -o filtered_output/ \
-    --f example/fusion.list \
+    -f example/fusion.list \
     --fe 0.1
 ```
 
-- `-f example/fusion.list`: Specifies a file containing adapter or linker id in patter.db that should not appear in the middle of a valid biological read. ReadChop scans for these patterns to detect chimeras.
+- `-f example/fusion.list`: Specifies a file containing adapter or linker id in pattern.db that should not appear in the middle of a valid biological read. ReadChop scans for these patterns to detect chimeras.
 
 - `--fe 0.1` (Fusion Error Rate): Sets the matching error rate for chimeric reads detection (default is 0.2, here decreased to 0.1).
 

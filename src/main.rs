@@ -49,7 +49,7 @@ fn initialize_logging() {
 fn handle_subcommand(command: &args::Commands) {
     match command {
         args::Commands::Encrypt { file } => {
-            pattern::encrypt_pattern_database(&file, "666666");
+            pattern::encrypt_pattern_database(file);
         }
         args::Commands::View { .. } => {
             view::handle_view_command(command);

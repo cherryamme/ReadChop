@@ -16,12 +16,16 @@ fn create_cli_styles() -> Styles {
     help_template = "{usage-heading} {usage} \nVersion: {version} {about-section}Author:{author} Email: cherryamme@qq.com\n {all-args} {tab}"
 )]
 #[command(
-    version, 
-    author, 
-    about, 
-    long_about = None, 
-    styles = create_cli_styles(), 
-    subcommand_negates_reqs = true, 
+    version = concat!(
+        env!("CARGO_PKG_VERSION"),
+        "\nEncryption key: ",
+        env!("READCHOP_PASSPHRASE_SOURCE")
+    ),
+    author,
+    about,
+    long_about = None,
+    styles = create_cli_styles(),
+    subcommand_negates_reqs = true,
     args_conflicts_with_subcommands = true
 )]
 pub struct Args {
@@ -36,7 +40,7 @@ pub struct Args {
     #[arg(short, long, default_value = "outdir")]
     pub outdir: String,
     
-    /// Number of threads (must be greater than 2)
+    /// Number of threads (must be at least 2)
     #[arg(short, long, default_value = "20", value_parser = validate_threads)]
     pub threads: usize,
     
@@ -116,7 +120,7 @@ pub struct Args {
 /// Subcommand enumeration
 #[derive(Subcommand, Debug, Clone)]
 pub enum Commands {
-    /// Encrypt database file
+    #[command(about = "Encrypt database file", after_help = concat!("Encryption key: ", env!("READCHOP_PASSPHRASE_SOURCE")))]
     Encrypt {
         /// Database file to encrypt
         file: String,
@@ -132,7 +136,7 @@ pub enum Commands {
         /// Pattern database file
         #[arg(short = 'd', long = "db", required = true)]
         pattern_db_file: String,
-        /// Number of threads (must be greater than 2)
+        /// Number of threads (must be at least 2)
         #[arg(short, long, default_value = "20", value_parser = validate_threads)]
         threads: usize,
         /// Minimum sequence length filter threshold
@@ -168,11 +172,11 @@ pub enum Commands {
     },
 }
 
-/// Validate threads parameter (must be greater than 2)
+/// Validate threads parameter (must be at least 2)
 fn validate_threads(input: &str) -> Result<usize, String> {
     match input.parse::<usize>() {
         Ok(value) if value >= 2 => Ok(value),
-        Ok(_) => Err("Threads must be greater than 2 or equal to 2".to_string()),
+        Ok(_) => Err("Threads must be at least 2".to_string()),
         Err(_) => Err("Threads must be a valid integer".to_string()),
     }
 }
