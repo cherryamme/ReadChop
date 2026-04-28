@@ -6,10 +6,10 @@ A high-performance command-line tool for demultiplexing third-generation sequenc
 
 ReadChop is designed specifically for third-generation sequencing data, used to split long-read FASTQ/GZ files based on specified patterns. It supports multi-threaded parallel processing, providing efficient sequence demultiplexing and barcode identification capabilities.
 
-**Version:** 1.0.2
+**Version:** 1.0.3
 **Author:** jiangchen  
 **Email:** cherryamme@qq.com  
-**Release Date:** 2026-03-24
+**Release Date:** 2026-04-28
 
 ## Features
 
