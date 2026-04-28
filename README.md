@@ -175,10 +175,12 @@ To maximize security, ReadChop does not use hardcoded passwords. The decryption 
 #### Step 1: Secure Compilation
 You must compile ReadChop from source to define the encryption behavior.
 Pass your custom password as an environment variable during the build process. Only this specific compiled binary will be able to read databases encrypted by it.
-If you compile the software without explicitly providing a custom password, ReadChop will automatically default to using the compiling machine's unique hardware code as the encryption key.
+If you compile the software without explicitly providing a custom password, ReadChop will automatically default to using the compiling machine's unique hardware code as the encryption key. This machine-specific key remains stable on the same machine, so databases encrypted there can be reused by binaries built on that machine.
 ```bash
 # Example: Injecting a custom key during compilation
 READCHOP_PASSPHRASE="YourSuperSecretKey" cargo build --release
+# Example: Use machine-specific key during compilation
+# cargo build --release
 ```
 #### Step 2: Encrypting the Database
 Once compiled, use the encrypt command to convert your standard pattern database into a secure file.
