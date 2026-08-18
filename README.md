@@ -1,3 +1,5 @@
+
+
 # ReadChop
 
 A high-performance command-line tool for demultiplexing third-generation sequencing long-read FASTQ/GZ files based on specified patterns.
@@ -53,7 +55,7 @@ cargo build --release
 
 ### System Requirements
 
-- **Rust**: 1.70+
+- **Rust**: 1.85+
 - **Operating System**: Linux, macOS, Windows
 - **Memory**: Recommended 4GB+
 - **Threads**: Must be at least 2 (default: 20)
@@ -272,7 +274,6 @@ The `example/` folder contains test data files for testing and demonstration:
 - `example.fasta` - Sample FASTA file
 - `barcode.list` - Pattern index list file
 - `pattern.db` - Pattern database file
-
 
 
 
