@@ -279,3 +279,11 @@ The `example/` folder contains test data files for testing and demonstration:
 ## License
 
 This project is licensed under an open source license. See the [LICENSE](LICENSE) file for details.
+
+## Citation
+
+ReadChop has been published in *Bioinformatics*. For details on the methods and performance evaluation, please see the [published article](https://academic.oup.com/bioinformatics/article/42/6/btag339/8716314).
+
+If you use ReadChop in your research, please cite the following paper. Thank you for citing our work!
+
+> Jiang, C. and Xiong, Y. (2026). ReadChop: a high-performance demultiplexer for long-read sequencing data. *Bioinformatics*, 42(6), btag339. https://doi.org/10.1093/bioinformatics/btag339
